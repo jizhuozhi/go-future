@@ -10,14 +10,24 @@ const (
 	stateDone
 )
 
+const stateDelta = 1 << 32
+
+const (
+	maskCounter = 1<<32 - 1
+	maskState   = 1<<34 - 1
+)
+
+const flagLazy uint64 = 1 << 63
+
 type state[T any] struct {
 	noCopy noCopy
 
-	state uint64 // high 32 bits are state, low 32 bits are waiter count.
+	state uint64 // high 30 bits are flags, mid 2 bits are state, low 32 bits are waiter count.
 	sema  uint32
 
 	val T
 	err error
+	f   func() (T, error)
 }
 
 type Promise[T any] struct {
@@ -31,14 +41,14 @@ type Future[T any] struct {
 func (s *state[T]) set(val T, err error) {
 	for {
 		st := atomic.LoadUint64(&s.state)
-		if (st >> 32) > stateFree {
+		if ((st & maskState) >> 32) > stateFree {
 			panic("promise already satisfied")
 		}
-		if atomic.CompareAndSwapUint64(&s.state, st, st+(1<<32)) {
+		if atomic.CompareAndSwapUint64(&s.state, st, st+stateDelta) {
 			s.val = val
 			s.err = err
-			st = atomic.AddUint64(&s.state, 1<<32)
-			for w := st & (1<<32 - 1); w > 0; w-- {
+			st = atomic.AddUint64(&s.state, stateDelta)
+			for w := st & maskCounter; w > 0; w-- {
 				runtime_Semrelease(&s.sema, false, 0)
 			}
 			return
@@ -47,9 +57,22 @@ func (s *state[T]) set(val T, err error) {
 }
 
 func (s *state[T]) get() (T, error) {
+	if atomic.LoadUint64(&s.state)&flagLazy == flagLazy {
+		for {
+			st := atomic.LoadUint64(&s.state)
+			if st&flagLazy != flagLazy {
+				break
+			}
+			if atomic.CompareAndSwapUint64(&s.state, st, st&(^flagLazy)) {
+				val, err := s.f()
+				s.set(val, err)
+				return val, err
+			}
+		}
+	}
 	for {
 		st := atomic.LoadUint64(&s.state)
-		if (st >> 32) == stateDone {
+		if ((st & maskState) >> 32) == stateDone {
 			return s.val, s.err
 		}
 		if atomic.CompareAndSwapUint64(&s.state, st, st+1) {
