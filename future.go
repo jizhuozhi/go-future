@@ -2,6 +2,7 @@ package future
 
 import (
 	"sync/atomic"
+	"unsafe"
 )
 
 const (
@@ -28,6 +29,13 @@ type state[T any] struct {
 	val T
 	err error
 	f   func() (T, error)
+
+	stack unsafe.Pointer // *callback[T]
+}
+
+type callback[T any] struct {
+	f    func(T, error)
+	next *callback[T]
 }
 
 type Promise[T any] struct {
@@ -50,6 +58,16 @@ func (s *state[T]) set(val T, err error) {
 			st = atomic.AddUint64(&s.state, stateDelta)
 			for w := st & maskCounter; w > 0; w-- {
 				runtime_Semrelease(&s.sema, false, 0)
+			}
+			for {
+				head := (*callback[T])(atomic.LoadPointer(&s.stack))
+				if head == nil {
+					break
+				}
+				if atomic.CompareAndSwapPointer(&s.stack, unsafe.Pointer(head), unsafe.Pointer(head.next)) {
+					head.f(val, err)
+					head.next = nil
+				}
 			}
 			return
 		}
@@ -82,12 +100,32 @@ func (s *state[T]) get() (T, error) {
 	}
 }
 
+func (s *state[T]) subscribe(cb func(T, error)) {
+	newCb := &callback[T]{f: cb}
+	for {
+		if ((atomic.LoadUint64(&s.state) & maskState) >> 32) == stateDone {
+			cb(s.val, s.err)
+			return
+		}
+
+		oldCb := (*callback[T])(atomic.LoadPointer(&s.stack))
+		newCb.next = oldCb
+		if atomic.CompareAndSwapPointer(&s.stack, unsafe.Pointer(oldCb), unsafe.Pointer(newCb)) {
+			return
+		}
+	}
+}
+
 func NewPromise[T any]() *Promise[T] {
 	return &Promise[T]{}
 }
 
 func (p *Promise[T]) Set(val T, err error) {
 	p.state.set(val, err)
+}
+
+func newFuture[T any](s *state[T]) *Future[T] {
+	return &Future[T]{state: s}
 }
 
 func (p *Promise[T]) Future() *Future[T] {
