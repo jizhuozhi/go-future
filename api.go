@@ -1,6 +1,10 @@
 package future
 
-import "sync/atomic"
+import (
+	"errors"
+	"sync/atomic"
+	"time"
+)
 
 func Async[T any](f func() (T, error)) *Future[T] {
 	s := &state[T]{}
@@ -65,4 +69,26 @@ func AllOf[T any](fs ...*Future[T]) *Future[struct{}] {
 		})
 	}
 	return &Future[struct{}]{state: s}
+}
+
+var ErrTimeout = errors.New("future timeout")
+
+func Timeout[T any](f *Future[T], d time.Duration) *Future[T] {
+	ch := make(chan struct{}, 1)
+	var val T
+	var err error
+	t := time.After(d)
+	go func() {
+		val, err = f.Get()
+		ch <- struct{}{}
+	}()
+	return Async(func() (T, error) {
+		select {
+		case <-ch:
+			return val, err
+		case <-t:
+		}
+		var zero T
+		return zero, ErrTimeout
+	})
 }
