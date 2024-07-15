@@ -124,10 +124,6 @@ func (p *Promise[T]) Set(val T, err error) {
 	p.state.set(val, err)
 }
 
-func newFuture[T any](s *state[T]) *Future[T] {
-	return &Future[T]{state: s}
-}
-
 func (p *Promise[T]) Future() *Future[T] {
 	return &Future[T]{state: &p.state}
 }

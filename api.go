@@ -1,6 +1,7 @@
 package future
 
 import (
+	"context"
 	"errors"
 	"sync/atomic"
 	"time"
@@ -90,5 +91,24 @@ func Timeout[T any](f *Future[T], d time.Duration) *Future[T] {
 		}
 		var zero T
 		return zero, ErrTimeout
+	})
+}
+
+func Ctx[T any](f *Future[T], ctx context.Context) *Future[T] {
+	ch := make(chan struct{}, 1)
+	var val T
+	var err error
+	go func() {
+		val, err = f.Get()
+		ch <- struct{}{}
+	}()
+	return Async(func() (T, error) {
+		select {
+		case <-ch:
+			return val, err
+		case <-ctx.Done():
+		}
+		var zero T
+		return zero, ctx.Err()
 	})
 }

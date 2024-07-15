@@ -1,6 +1,7 @@
 package future
 
 import (
+	"context"
 	"math/rand"
 	"runtime"
 	"strconv"
@@ -281,4 +282,27 @@ func TestTimeout(t *testing.T) {
 		assert.Equal(t, 1, val)
 		assert.NoError(t, err)
 	}
+}
+
+func TestCtx(t *testing.T) {
+	f := Async(func() (int, error) {
+		time.Sleep(time.Millisecond)
+		return 1, nil
+	})
+	func() {
+		ctx, cancal := context.WithTimeout(context.Background(), time.Nanosecond)
+		defer cancal()
+		f := Ctx(f, ctx)
+		val, err := f.Get()
+		assert.Zero(t, 0, val)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	}()
+	func() {
+		ctx, cancal := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancal()
+		f := Ctx(f, ctx)
+		val, err := f.Get()
+		assert.Equal(t, 1, val)
+		assert.NoError(t, err)
+	}()
 }
