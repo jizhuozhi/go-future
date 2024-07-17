@@ -25,18 +25,87 @@ package main
 
 import "github.com/jizhuozhi/go-future"
 
-func foo() *future.Promise[string] {
+func main() {
 	p := future.NewPromise[string]()
 	go func() {
 		p.Set("foo", nil)
 	}()
-	return p
-}
-
-func main() {
-	p := foo()
 	f := p.Future()
 	val, err := f.Get()
+	println(val, err)
+}
+```
+
+## Useful API
+
+### `Async`
+
+Create an asynchronous task and return a `Future` to get the result.
+
+### Example
+
+```go
+package main
+
+import "github.com/jizhuozhi/go-future"
+
+func main() {
+	f := future.Async(func() (string, error) {
+		return "foo", nil
+	})
+	val, err := f.Get()
+	println(val, err)
+}
+```
+
+### `Lazy`
+
+
+Create a lazy execution task and return a `Future` to get the result. The task will only be executed once, and the task will only be executed when `Get` is called for the first time.
+
+### Example
+
+```go
+package main
+
+import "github.com/jizhuozhi/go-future"
+
+func main() {
+	f := future.Lazy(func() (string, error) {
+		return "foo", nil
+	})
+	val, err := f.Get()
+	println(val, err)
+}
+```
+
+### `Then`
+
+
+In reality, asynchronous tasks have dependencies. When task B depends on task A, it can be concatenated through `Then`.
+
+### Example
+
+```go
+package main
+
+import (
+	"strconv"
+
+	"github.com/jizhuozhi/go-future"
+)
+
+func main() {
+	f := future.Async(func() (int, error) {
+		return 1, nil
+	})
+	ff := future.Then(f, func(val int, err error) (string, error) {
+		if err != nil {
+			return "", err
+		}
+		return strconv.Itoa(val), nil
+	})
+	val, err := ff.Get()
 	println(val, err)
 }
 ```
