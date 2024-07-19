@@ -103,12 +103,13 @@ func (s *state[T]) get() (T, error) {
 func (s *state[T]) subscribe(cb func(T, error)) {
 	newCb := &callback[T]{f: cb}
 	for {
+		oldCb := (*callback[T])(atomic.LoadPointer(&s.stack))
+
 		if ((atomic.LoadUint64(&s.state) & maskState) >> 32) == stateDone {
 			cb(s.val, s.err)
 			return
 		}
 
-		oldCb := (*callback[T])(atomic.LoadPointer(&s.stack))
 		newCb.next = oldCb
 		if atomic.CompareAndSwapPointer(&s.stack, unsafe.Pointer(oldCb), unsafe.Pointer(newCb)) {
 			return
