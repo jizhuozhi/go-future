@@ -3,13 +3,25 @@ package future
 import (
 	"context"
 	"errors"
+	"fmt"
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 )
 
+var ErrPanic = errors.New("async panic")
+var ErrTimeout = errors.New("future timeout")
+
 func Async[T any](f func() (T, error)) *Future[T] {
 	s := &state[T]{}
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				err := fmt.Errorf("%w, err=%s, stack=%s", ErrPanic, r, debug.Stack())
+				var zero T
+				s.set(zero, err)
+			}
+		}()
 		val, err := f()
 		s.set(val, err)
 	}()
@@ -71,8 +83,6 @@ func AllOf[T any](fs ...*Future[T]) *Future[struct{}] {
 	}
 	return &Future[struct{}]{state: s}
 }
-
-var ErrTimeout = errors.New("future timeout")
 
 func Timeout[T any](f *Future[T], d time.Duration) *Future[T] {
 	ch := make(chan struct{}, 1)

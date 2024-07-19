@@ -22,6 +22,15 @@ func TestAsync(t *testing.T) {
 	assert.Equal(t, nil, err)
 }
 
+func TestAsyncPanic(t *testing.T) {
+	f := Async(func() (int, error) {
+		panic("panic")
+	})
+	val, err := f.Get()
+	assert.Equal(t, 0, val)
+	assert.ErrorIs(t, err, ErrPanic)
+}
+
 func TestLazy(t *testing.T) {
 	f := Lazy(func() (int, error) {
 		return 1, nil
