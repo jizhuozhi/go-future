@@ -274,18 +274,41 @@ func TestAllOfWhenErr(t *testing.T) {
 }
 
 func TestTimeout(t *testing.T) {
-	f := Async(func() (int, error) {
-		time.Sleep(time.Millisecond)
-		return 1, nil
-	})
 	{
-		f := Timeout(f, time.Nanosecond)
+		f := Timeout(Async(func() (int, error) {
+			time.Sleep(time.Millisecond)
+			return 1, nil
+		}), time.Nanosecond)
 		val, err := f.Get()
 		assert.Zero(t, 0, val)
 		assert.ErrorIs(t, err, ErrTimeout)
 	}
 	{
-		f := Timeout(f, 10*time.Millisecond)
+		f := Timeout(Async(func() (int, error) {
+			time.Sleep(time.Millisecond)
+			return 1, nil
+		}), 10*time.Millisecond)
+		val, err := f.Get()
+		assert.Equal(t, 1, val)
+		assert.NoError(t, err)
+	}
+}
+
+func TestUntil(t *testing.T) {
+	{
+		f := Until(Async(func() (int, error) {
+			time.Sleep(time.Millisecond)
+			return 1, nil
+		}), time.Now().Add(time.Nanosecond))
+		val, err := f.Get()
+		assert.Zero(t, 0, val)
+		assert.ErrorIs(t, err, ErrTimeout)
+	}
+	{
+		f := Until(Async(func() (int, error) {
+			time.Sleep(time.Millisecond)
+			return 1, nil
+		}), time.Now().Add(10*time.Millisecond))
 		val, err := f.Get()
 		assert.Equal(t, 1, val)
 		assert.NoError(t, err)

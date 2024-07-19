@@ -100,3 +100,7 @@ func Timeout[T any](f *Future[T], d time.Duration) *Future[T] {
 	})
 	return &Future[T]{state: s}
 }
+
+func Until[T any](f *Future[T], t time.Time) *Future[T] {
+	return Timeout(f, t.Sub(time.Now()))
+}
