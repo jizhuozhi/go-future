@@ -1,7 +1,6 @@
 package future
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"runtime/debug"
@@ -85,40 +84,19 @@ func AllOf[T any](fs ...*Future[T]) *Future[struct{}] {
 }
 
 func Timeout[T any](f *Future[T], d time.Duration) *Future[T] {
-	ch := make(chan struct{}, 1)
-	var val T
-	var err error
-	t := time.After(d)
-	go func() {
-		val, err = f.Get()
-		ch <- struct{}{}
-	}()
-	return Async(func() (T, error) {
-		select {
-		case <-ch:
-			return val, err
-		case <-t:
+	var done uint32
+	s := &state[T]{}
+	timer := time.AfterFunc(d, func() {
+		if atomic.CompareAndSwapUint32(&done, 0, 1) {
+			var zero T
+			s.set(zero, ErrTimeout)
 		}
-		var zero T
-		return zero, ErrTimeout
 	})
-}
-
-func Ctx[T any](f *Future[T], ctx context.Context) *Future[T] {
-	ch := make(chan struct{}, 1)
-	var val T
-	var err error
-	go func() {
-		val, err = f.Get()
-		ch <- struct{}{}
-	}()
-	return Async(func() (T, error) {
-		select {
-		case <-ch:
-			return val, err
-		case <-ctx.Done():
+	f.state.subscribe(func(val T, err error) {
+		if atomic.CompareAndSwapUint32(&done, 0, 1) {
+			s.set(val, err)
+			timer.Stop()
 		}
-		var zero T
-		return zero, ctx.Err()
 	})
+	return &Future[T]{state: s}
 }
