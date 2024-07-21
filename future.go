@@ -7,7 +7,7 @@ import (
 
 const (
 	stateFree uint64 = iota
-	stateGray
+	stateDoing
 	stateDone
 )
 
