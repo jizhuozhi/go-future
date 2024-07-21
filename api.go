@@ -43,6 +43,16 @@ func Then[T any, R any](f *Future[T], cb func(T, error) (R, error)) *Future[R] {
 	return &Future[R]{state: s}
 }
 
+func ThenAsync[T any, R any](f *Future[T], cb func(T, error) *Future[R]) *Future[R] {
+	s := &state[R]{}
+	f.state.subscribe(func(val T, err error) {
+		cb(val, err).state.subscribe(func(rval R, rerr error) {
+			s.set(rval, rerr)
+		})
+	})
+	return &Future[R]{state: s}
+}
+
 type AnyResult[T any] struct {
 	Index int
 	Val   T

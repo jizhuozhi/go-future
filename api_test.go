@@ -144,6 +144,65 @@ func TestThenConcurrency(t *testing.T) {
 	wg.Wait()
 }
 
+func TestThenAsync(t *testing.T) {
+	cases := []struct {
+		val  int
+		err  error
+		rval string
+		rerr error
+	}{
+		{1, nil, "1", nil},
+		{10, errFoo, "", errFoo},
+	}
+
+	for _, tt := range cases {
+		p := NewPromise[int]()
+		f := p.Future()
+		ff := ThenAsync(f, func(val int, err error) *Future[string] {
+			return Async(func() (string, error) {
+				if err != nil {
+					return "", err
+				}
+				return strconv.FormatInt(int64(val), 10), nil
+			})
+		})
+		p.Set(tt.val, tt.err)
+		val, err := ff.Get()
+		assert.Equal(t, tt.rval, val)
+		assert.Equal(t, tt.err, err)
+	}
+}
+
+func TestThenAsyncAfterDone(t *testing.T) {
+	cases := []struct {
+		val  int
+		err  error
+		rval string
+		rerr error
+	}{
+		{1, nil, "1", nil},
+		{10, errFoo, "", errFoo},
+	}
+
+	for _, tt := range cases {
+		p := NewPromise[int]()
+		p.Set(tt.val, tt.err)
+
+		f := p.Future()
+		ff := ThenAsync(f, func(val int, err error) *Future[string] {
+			return Async(func() (string, error) {
+				if err != nil {
+					return "", err
+				}
+				return strconv.FormatInt(int64(val), 10), nil
+			})
+		})
+		val, err := ff.Get()
+		assert.Equal(t, tt.rval, val)
+		assert.Equal(t, tt.err, err)
+	}
+}
+
 func TestAnyOf(t *testing.T) {
 	target := rand.Intn(10)
 	vals := make([]int, 10)
