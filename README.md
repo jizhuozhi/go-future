@@ -1,5 +1,7 @@
 # go-future
 
+[![codecov](https://codecov.io/github/jizhuozhi/go-future/graph/badge.svg?token=9UZDVRZCQM)](https://codecov.io/github/jizhuozhi/go-future)
+
 The `Promise` provides a facility to store a value or an error that is later acquired asynchronously via a `Future` created by the `Promise` object. Note that the `Promise` object is meant to be used only once.
 
 ## Benchmark
