@@ -95,6 +95,9 @@ func (s *state[T]) get() (T, error) {
 		}
 		if atomic.CompareAndSwapUint64(&s.state, st, st+1) {
 			runtime_Semacquire(&s.sema)
+			if (atomic.LoadUint64(&s.state)&maskState)>>32 != stateDone {
+				panic("sync: notified before state has done")
+			}
 			return s.val, s.err
 		}
 	}
