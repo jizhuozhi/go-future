@@ -14,15 +14,15 @@ var ErrTimeout = errors.New("future timeout")
 func Async[T any](f func() (T, error)) *Future[T] {
 	s := &state[T]{}
 	go func() {
+		var val T
+		var err error
 		defer func() {
 			if r := recover(); r != nil {
-				err := fmt.Errorf("%w, err=%s, stack=%s", ErrPanic, r, debug.Stack())
-				var zero T
-				s.set(zero, err)
+				err = fmt.Errorf("%w, err=%s, stack=%s", ErrPanic, r, debug.Stack())
 			}
+			s.set(val, err)
 		}()
-		val, err := f()
-		s.set(val, err)
+		val, err = f()
 	}()
 	return &Future[T]{state: s}
 }
