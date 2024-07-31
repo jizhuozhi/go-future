@@ -61,6 +61,13 @@ func TestLazyConcurrency(t *testing.T) {
 	wg.Wait()
 }
 
+func TestDone(t *testing.T) {
+	f := Done(1)
+	val, err := f.Get()
+	assert.Equal(t, 1, val)
+	assert.Equal(t, nil, err)
+}
+
 func TestAwait(t *testing.T) {
 	f := Async(func() (int, error) {
 		return 1, nil

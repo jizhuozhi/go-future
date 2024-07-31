@@ -34,6 +34,12 @@ func Lazy[T any](f func() (T, error)) *Future[T] {
 	return &Future[T]{state: s}
 }
 
+func Done[T any](val T) *Future[T] {
+	s := &state[T]{}
+	s.set(val, nil)
+	return &Future[T]{state: s}
+}
+
 func Await[T any](f *Future[T]) (T, error) {
 	return f.Get()
 }
