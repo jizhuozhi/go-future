@@ -83,6 +83,12 @@ func AnyOf[T any](fs ...*Future[T]) *Future[AnyResult[T]] {
 	return &Future[AnyResult[T]]{state: s}
 }
 
+func ToAny[T any](f *Future[T]) *Future[any] {
+	return Then(f, func(val T, err error) (any, error) {
+		return val, err
+	})
+}
+
 func AllOf[T any](fs ...*Future[T]) *Future[struct{}] {
 	var done uint32
 	s := &state[struct{}]{}

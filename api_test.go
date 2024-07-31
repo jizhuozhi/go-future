@@ -276,6 +276,16 @@ func TestAnyOfWhenErrFirst(t *testing.T) {
 	assert.Equal(t, errFoo, r.Err)
 }
 
+func TestToAny(t *testing.T) {
+	f := Async(func() (int, error) {
+		return 1, nil
+	})
+	ff := ToAny(f)
+	val, err := ff.Get()
+	assert.Equal(t, 1, val)
+	assert.Equal(t, nil, err)
+}
+
 func TestAllOf(t *testing.T) {
 	target := rand.Intn(10)
 	vals := make([]int, 10)
