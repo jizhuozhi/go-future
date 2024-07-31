@@ -34,6 +34,10 @@ func Lazy[T any](f func() (T, error)) *Future[T] {
 	return &Future[T]{state: s}
 }
 
+func Await[T any](f *Future[T]) (T, error) {
+	return f.Get()
+}
+
 func Then[T any, R any](f *Future[T], cb func(T, error) (R, error)) *Future[R] {
 	s := &state[R]{}
 	f.state.subscribe(func(val T, err error) {

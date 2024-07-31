@@ -61,6 +61,15 @@ func TestLazyConcurrency(t *testing.T) {
 	wg.Wait()
 }
 
+func TestAwait(t *testing.T) {
+	f := Async(func() (int, error) {
+		return 1, nil
+	})
+	val, err := Await(f)
+	assert.Equal(t, 1, val)
+	assert.Equal(t, nil, err)
+}
+
 func TestThen(t *testing.T) {
 	cases := []struct {
 		val  int
