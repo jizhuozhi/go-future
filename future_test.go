@@ -19,6 +19,7 @@ func TestPromiseAndFuture(t *testing.T) {
 	val, err := f.Get()
 	assert.Equal(t, val, 1)
 	assert.Equal(t, err, errFoo)
+	assert.Equal(t, 2, f.GetOrDefault(2))
 }
 
 func TestPromiseAndFutureConcurrency(t *testing.T) {

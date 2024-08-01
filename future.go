@@ -136,6 +136,14 @@ func (f *Future[T]) Get() (T, error) {
 	return f.state.get()
 }
 
+func (f *Future[T]) GetOrDefault(defaultVal T) T {
+	val, err := f.state.get()
+	if err != nil {
+		return defaultVal
+	}
+	return val
+}
+
 // noCopy may be embedded into structs which must not be copied
 // after the first use.
 //
