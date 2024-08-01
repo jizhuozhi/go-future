@@ -58,6 +58,22 @@ func TestPromiseSetTwice(t *testing.T) {
 	})
 }
 
+func TestFutureSubscribe(t *testing.T) {
+	p := NewPromise[int]()
+	f := p.Future()
+	val1 := 0
+	val2 := 0
+	f.Subscribe(func(val int, err error) {
+		val1 = val + 1
+	})
+	f.Subscribe(func(val int, err error) {
+		val2 = val + 2
+	})
+	p.Set(1, nil)
+	assert.Equal(t, val1, 2)
+	assert.Equal(t, val2, 3)
+}
+
 func Benchmark(b *testing.B) {
 	b.Run("Promise", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {

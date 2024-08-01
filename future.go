@@ -144,6 +144,10 @@ func (f *Future[T]) GetOrDefault(defaultVal T) T {
 	return val
 }
 
+func (f *Future[T]) Subscribe(cb func(val T, err error)) {
+	f.state.subscribe(cb)
+}
+
 // noCopy may be embedded into structs which must not be copied
 // after the first use.
 //
