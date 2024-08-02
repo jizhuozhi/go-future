@@ -49,7 +49,7 @@ type Future[T any] struct {
 func (s *state[T]) set(val T, err error) {
 	for {
 		st := atomic.LoadUint64(&s.state)
-		if ((st & maskState) >> 32) > stateFree {
+		if !isFree(st) {
 			panic("promise already satisfied")
 		}
 		if atomic.CompareAndSwapUint64(&s.state, st, st+stateDelta) {
@@ -90,12 +90,12 @@ func (s *state[T]) get() (T, error) {
 	}
 	for {
 		st := atomic.LoadUint64(&s.state)
-		if ((st & maskState) >> 32) == stateDone {
+		if isDone(st) {
 			return s.val, s.err
 		}
 		if atomic.CompareAndSwapUint64(&s.state, st, st+1) {
 			runtime_Semacquire(&s.sema)
-			if (atomic.LoadUint64(&s.state)&maskState)>>32 != stateDone {
+			if !isDone(atomic.LoadUint64(&s.state)) {
 				panic("sync: notified before state has done")
 			}
 			return s.val, s.err
@@ -108,7 +108,7 @@ func (s *state[T]) subscribe(cb func(T, error)) {
 	for {
 		oldCb := (*callback[T])(atomic.LoadPointer(&s.stack))
 
-		if ((atomic.LoadUint64(&s.state) & maskState) >> 32) == stateDone {
+		if isDone(atomic.LoadUint64(&s.state)) {
 			cb(s.val, s.err)
 			return
 		}
@@ -117,7 +117,7 @@ func (s *state[T]) subscribe(cb func(T, error)) {
 		if atomic.CompareAndSwapPointer(&s.stack, unsafe.Pointer(oldCb), unsafe.Pointer(newCb)) {
 			for {
 				// Double-check the state to ensure the callback is not missed
-				if ((atomic.LoadUint64(&s.state) & maskState) >> 32) == stateDone {
+				if isDone(atomic.LoadUint64(&s.state)) {
 					if atomic.CompareAndSwapPointer(&s.stack, unsafe.Pointer(newCb), unsafe.Pointer(newCb.next)) {
 						cb(s.val, s.err)
 						return
@@ -156,6 +156,14 @@ func (f *Future[T]) GetOrDefault(defaultVal T) T {
 
 func (f *Future[T]) Subscribe(cb func(val T, err error)) {
 	f.state.subscribe(cb)
+}
+
+func isFree(st uint64) bool {
+	return ((st & maskState) >> 32) == stateFree
+}
+
+func isDone(st uint64) bool {
+	return ((st & maskState) >> 32) == stateDone
 }
 
 // noCopy may be embedded into structs which must not be copied
