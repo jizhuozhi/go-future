@@ -115,7 +115,17 @@ func (s *state[T]) subscribe(cb func(T, error)) {
 
 		newCb.next = oldCb
 		if atomic.CompareAndSwapPointer(&s.stack, unsafe.Pointer(oldCb), unsafe.Pointer(newCb)) {
-			return
+			for {
+				// Double-check the state to ensure the callback is not missed
+				if ((atomic.LoadUint64(&s.state) & maskState) >> 32) == stateDone {
+					if atomic.CompareAndSwapPointer(&s.stack, unsafe.Pointer(newCb), unsafe.Pointer(newCb.next)) {
+						cb(s.val, s.err)
+						return
+					}
+				} else {
+					return
+				}
+			}
 		}
 	}
 }
