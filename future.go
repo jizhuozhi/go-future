@@ -142,6 +142,10 @@ func (p *Promise[T]) Future() *Future[T] {
 	return &Future[T]{state: &p.state}
 }
 
+func (p *Promise[T]) Free() bool {
+	return isFree(atomic.LoadUint64(&p.state.state))
+}
+
 func (f *Future[T]) Get() (T, error) {
 	return f.state.get()
 }
@@ -156,6 +160,10 @@ func (f *Future[T]) GetOrDefault(defaultVal T) T {
 
 func (f *Future[T]) Subscribe(cb func(val T, err error)) {
 	f.state.subscribe(cb)
+}
+
+func (f *Future[T]) Done() bool {
+	return isDone(atomic.LoadUint64(&f.state.state))
 }
 
 func isFree(st uint64) bool {

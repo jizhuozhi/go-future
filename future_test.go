@@ -74,6 +74,17 @@ func TestFutureSubscribe(t *testing.T) {
 	assert.Equal(t, val2, 3)
 }
 
+func TestPromiseFreeAndFutureDone(t *testing.T) {
+	p := NewPromise[int]()
+	f := p.Future()
+	assert.True(t, p.Free())
+	assert.False(t, f.Done())
+
+	p.Set(1, nil)
+	assert.False(t, p.Free())
+	assert.True(t, f.Done())
+}
+
 func Benchmark(b *testing.B) {
 	b.Run("Promise", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
