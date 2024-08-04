@@ -235,6 +235,9 @@ func TestAnyOf(t *testing.T) {
 		i := i
 		fs[i] = Async(func() (int, error) {
 			time.Sleep(time.Duration(vals[i]) * time.Millisecond)
+			if i != target && rand.Intn(2) == 0 { // random error
+				return 0, errFoo
+			}
 			return vals[i], nil
 		})
 	}
@@ -246,7 +249,7 @@ func TestAnyOf(t *testing.T) {
 	assert.Equal(t, nil, r.Err)
 }
 
-func TestAnyOfWhenErrFirst(t *testing.T) {
+func TestAnyOfWhenAllErr(t *testing.T) {
 	target := rand.Intn(10)
 	vals := make([]int, 10)
 	for i := 0; i < len(vals); i++ {
@@ -261,11 +264,11 @@ func TestAnyOfWhenErrFirst(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		i := i
 		fs[i] = Async(func() (int, error) {
-			time.Sleep(time.Duration(vals[i]) * time.Millisecond)
 			if i == target {
 				return 0, errFoo
 			}
-			return vals[i], nil
+			time.Sleep(time.Duration(vals[i]) * time.Millisecond)
+			return 0, errFoo
 		})
 	}
 	f := AnyOf(fs...)

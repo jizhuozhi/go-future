@@ -70,13 +70,24 @@ type AnyResult[T any] struct {
 }
 
 func AnyOf[T any](fs ...*Future[T]) *Future[AnyResult[T]] {
+	var counter int32
 	var done uint32
+	var errIndex int32 = -1
 	s := &state[AnyResult[T]]{}
 	for i, f := range fs {
 		i := i
 		f.state.subscribe(func(val T, err error) {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(AnyResult[T]{Index: i, Val: val, Err: err}, nil)
+			if err == nil {
+				if atomic.CompareAndSwapUint32(&done, 0, 1) {
+					s.set(AnyResult[T]{Index: i, Val: val, Err: err}, nil)
+				}
+			} else {
+				atomic.CompareAndSwapInt32(&errIndex, -1, int32(i))
+				if atomic.AddInt32(&counter, 1) == int32(len(fs)) {
+					idx := atomic.LoadInt32(&errIndex)
+					fval, ferr := fs[idx].Get()
+					s.set(AnyResult[T]{Index: int(idx), Val: fval, Err: ferr}, nil)
+				}
 			}
 		})
 	}
