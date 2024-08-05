@@ -20,33 +20,33 @@ const (
 
 const flagLazy uint64 = 1 << 63
 
-type state[T any] struct {
+type state struct {
 	noCopy noCopy
 
 	state uint64 // high 30 bits are flags, mid 2 bits are state, low 32 bits are waiter count.
 	sema  uint32
 
-	val T
+	val interface{}
 	err error
-	f   func() (T, error)
+	f   func() (interface{}, error)
 
-	stack unsafe.Pointer // *callback[T]
+	stack unsafe.Pointer // *callback
 }
 
-type callback[T any] struct {
-	f    func(T, error)
-	next *callback[T]
+type callback struct {
+	f    func(interface{}, error)
+	next *callback
 }
 
-type Promise[T any] struct {
-	state state[T]
+type Promise struct {
+	state state
 }
 
-type Future[T any] struct {
-	state *state[T]
+type Future struct {
+	state *state
 }
 
-func (s *state[T]) set(val T, err error) {
+func (s *state) set(val interface{}, err error) {
 	for {
 		st := atomic.LoadUint64(&s.state)
 		if !isFree(st) {
@@ -60,7 +60,7 @@ func (s *state[T]) set(val T, err error) {
 				runtime_Semrelease(&s.sema, false, 0)
 			}
 			for {
-				head := (*callback[T])(atomic.LoadPointer(&s.stack))
+				head := (*callback)(atomic.LoadPointer(&s.stack))
 				if head == nil {
 					break
 				}
@@ -74,7 +74,7 @@ func (s *state[T]) set(val T, err error) {
 	}
 }
 
-func (s *state[T]) get() (T, error) {
+func (s *state) get() (interface{}, error) {
 	if atomic.LoadUint64(&s.state)&flagLazy == flagLazy {
 		for {
 			st := atomic.LoadUint64(&s.state)
@@ -103,10 +103,10 @@ func (s *state[T]) get() (T, error) {
 	}
 }
 
-func (s *state[T]) subscribe(cb func(T, error)) {
-	newCb := &callback[T]{f: cb}
+func (s *state) subscribe(cb func(interface{}, error)) {
+	newCb := &callback{f: cb}
 	for {
-		oldCb := (*callback[T])(atomic.LoadPointer(&s.stack))
+		oldCb := (*callback)(atomic.LoadPointer(&s.stack))
 
 		if isDone(atomic.LoadUint64(&s.state)) {
 			cb(s.val, s.err)
@@ -130,27 +130,27 @@ func (s *state[T]) subscribe(cb func(T, error)) {
 	}
 }
 
-func NewPromise[T any]() *Promise[T] {
-	return &Promise[T]{}
+func NewPromise() *Promise {
+	return &Promise{}
 }
 
-func (p *Promise[T]) Set(val T, err error) {
+func (p *Promise) Set(val interface{}, err error) {
 	p.state.set(val, err)
 }
 
-func (p *Promise[T]) Future() *Future[T] {
-	return &Future[T]{state: &p.state}
+func (p *Promise) Future() *Future {
+	return &Future{state: &p.state}
 }
 
-func (p *Promise[T]) Free() bool {
+func (p *Promise) Free() bool {
 	return isFree(atomic.LoadUint64(&p.state.state))
 }
 
-func (f *Future[T]) Get() (T, error) {
+func (f *Future) Get() (interface{}, error) {
 	return f.state.get()
 }
 
-func (f *Future[T]) GetOrDefault(defaultVal T) T {
+func (f *Future) GetOrDefault(defaultVal interface{}) interface{} {
 	val, err := f.state.get()
 	if err != nil {
 		return defaultVal
@@ -158,11 +158,11 @@ func (f *Future[T]) GetOrDefault(defaultVal T) T {
 	return val
 }
 
-func (f *Future[T]) Subscribe(cb func(val T, err error)) {
+func (f *Future) Subscribe(cb func(val interface{}, err error)) {
 	f.state.subscribe(cb)
 }
 
-func (f *Future[T]) Done() bool {
+func (f *Future) Done() bool {
 	return isDone(atomic.LoadUint64(&f.state.state))
 }
 
