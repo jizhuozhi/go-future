@@ -13,7 +13,7 @@ import (
 var errFoo = errors.New("foo")
 
 func TestPromiseAndFuture(t *testing.T) {
-	p := NewPromise[int]()
+	p := NewPromise()
 	f := p.Future()
 	p.Set(1, errFoo)
 	val, err := f.Get()
@@ -26,7 +26,7 @@ func TestPromiseAndFutureConcurrency(t *testing.T) {
 	n := runtime.NumCPU() - 1
 
 	ch := make(chan struct{}, n)
-	p := NewPromise[int]()
+	p := NewPromise()
 	go func() {
 		for i := 0; i < n; i++ {
 			ch <- struct{}{}
@@ -51,7 +51,7 @@ func TestPromiseAndFutureConcurrency(t *testing.T) {
 }
 
 func TestPromiseSetTwice(t *testing.T) {
-	p := NewPromise[int]()
+	p := NewPromise()
 	p.Set(1, nil)
 	assert.Panics(t, func() {
 		p.Set(1, nil)
@@ -59,15 +59,15 @@ func TestPromiseSetTwice(t *testing.T) {
 }
 
 func TestFutureSubscribe(t *testing.T) {
-	p := NewPromise[int]()
+	p := NewPromise()
 	f := p.Future()
 	val1 := 0
 	val2 := 0
-	f.Subscribe(func(val int, err error) {
-		val1 = val + 1
+	f.Subscribe(func(val interface{}, err error) {
+		val1 = val.(int) + 1
 	})
-	f.Subscribe(func(val int, err error) {
-		val2 = val + 2
+	f.Subscribe(func(val interface{}, err error) {
+		val2 = val.(int) + 2
 	})
 	p.Set(1, nil)
 	assert.Equal(t, val1, 2)
@@ -75,7 +75,7 @@ func TestFutureSubscribe(t *testing.T) {
 }
 
 func TestPromiseFreeAndFutureDone(t *testing.T) {
-	p := NewPromise[int]()
+	p := NewPromise()
 	f := p.Future()
 	assert.True(t, p.Free())
 	assert.False(t, f.Done())
@@ -88,7 +88,7 @@ func TestPromiseFreeAndFutureDone(t *testing.T) {
 func Benchmark(b *testing.B) {
 	b.Run("Promise", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			p := NewPromise[int]()
+			p := NewPromise()
 			f := p.Future()
 			go func() {
 				p.Set(1, nil)

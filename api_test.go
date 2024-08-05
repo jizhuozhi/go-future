@@ -3,7 +3,6 @@ package future
 import (
 	"math/rand"
 	"runtime"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -13,7 +12,7 @@ import (
 )
 
 func TestAsync(t *testing.T) {
-	f := Async(func() (int, error) {
+	f := Async(func() (interface{}, error) {
 		return 1, nil
 	})
 	val, err := f.Get()
@@ -22,7 +21,7 @@ func TestAsync(t *testing.T) {
 }
 
 func TestAsyncPanic(t *testing.T) {
-	f := Async(func() (int, error) {
+	f := Async(func() (interface{}, error) {
 		panic("panic")
 	})
 	val, err := f.Get()
@@ -31,7 +30,7 @@ func TestAsyncPanic(t *testing.T) {
 }
 
 func TestLazy(t *testing.T) {
-	f := Lazy(func() (int, error) {
+	f := Lazy(func() (interface{}, error) {
 		return 1, nil
 	})
 	val, err := f.Get()
@@ -43,7 +42,7 @@ func TestLazyConcurrency(t *testing.T) {
 	n := runtime.NumCPU() - 1
 
 	var counter int32
-	f := Lazy(func() (int, error) {
+	f := Lazy(func() (interface{}, error) {
 		c := atomic.AddInt32(&counter, 1)
 		return int(c), nil
 	})
@@ -69,7 +68,7 @@ func TestDone(t *testing.T) {
 }
 
 func TestAwait(t *testing.T) {
-	f := Async(func() (int, error) {
+	f := Async(func() (interface{}, error) {
 		return 1, nil
 	})
 	val, err := Await(f)
@@ -89,13 +88,13 @@ func TestThen(t *testing.T) {
 	}
 
 	for _, tt := range cases {
-		p := NewPromise[int]()
+		p := NewPromise()
 		f := p.Future()
-		ff := Then(f, func(val int, err error) (string, error) {
+		ff := Then(f, func(val interface{}, err error) (interface{}, error) {
 			if err != nil {
 				return "", err
 			}
-			return strconv.FormatInt(int64(val), 10), nil
+			return val.(int), nil
 		})
 		p.Set(tt.val, tt.err)
 		val, err := ff.Get()
@@ -116,15 +115,15 @@ func TestThenAfterDone(t *testing.T) {
 	}
 
 	for _, tt := range cases {
-		p := NewPromise[int]()
+		p := NewPromise()
 		p.Set(tt.val, tt.err)
 
 		f := p.Future()
-		ff := Then(f, func(val int, err error) (string, error) {
+		ff := Then(f, func(val interface{}, err error) (interface{}, error) {
 			if err != nil {
 				return "", err
 			}
-			return strconv.FormatInt(int64(val), 10), nil
+			return val.(int), nil
 		})
 		val, err := ff.Get()
 		assert.Equal(t, tt.rval, val)
@@ -135,15 +134,18 @@ func TestThenAfterDone(t *testing.T) {
 func TestThenConcurrency(t *testing.T) {
 	n := runtime.NumCPU() - 1
 	rvals := make([]int, n)
-	ffs := make([]func(int, error) (int64, error), n)
+	ffs := make([]func(interface{}, error) (interface{}, error), n)
 	for i := 0; i < n; i++ {
 		r := rand.Intn(100)
 		rvals[i] = r
-		ffs[i] = func(i int, err error) (int64, error) {
-			return int64(i + r), nil
+		ffs[i] = func(i interface{}, err error) (interface{}, error) {
+			// So call less is more huh.
+			// return i + r, nil
+			ii := i.(int)
+			return ii + r, nil
 		}
 	}
-	p := NewPromise[int]()
+	p := NewPromise()
 	f := p.Future()
 	wg := sync.WaitGroup{}
 	for i := 0; i < n; i++ {
@@ -172,14 +174,14 @@ func TestThenAsync(t *testing.T) {
 	}
 
 	for _, tt := range cases {
-		p := NewPromise[int]()
+		p := NewPromise()
 		f := p.Future()
-		ff := ThenAsync(f, func(val int, err error) *Future[string] {
-			return Async(func() (string, error) {
+		ff := ThenAsync(f, func(val interface{}, err error) *Future {
+			return Async(func() (interface{}, error) {
 				if err != nil {
 					return "", err
 				}
-				return strconv.FormatInt(int64(val), 10), nil
+				return val.(int), nil
 			})
 		})
 		p.Set(tt.val, tt.err)
@@ -201,16 +203,16 @@ func TestThenAsyncAfterDone(t *testing.T) {
 	}
 
 	for _, tt := range cases {
-		p := NewPromise[int]()
+		p := NewPromise()
 		p.Set(tt.val, tt.err)
 
 		f := p.Future()
-		ff := ThenAsync(f, func(val int, err error) *Future[string] {
-			return Async(func() (string, error) {
+		ff := ThenAsync(f, func(val interface{}, err error) *Future {
+			return Async(func() (interface{}, error) {
 				if err != nil {
 					return "", err
 				}
-				return strconv.FormatInt(int64(val), 10), nil
+				return val.(int), nil
 			})
 		})
 		val, err := ff.Get()
@@ -230,10 +232,10 @@ func TestAnyOf(t *testing.T) {
 		}
 	}
 
-	fs := make([]*Future[int], 10)
+	fs := make([]*Future, 10)
 	for i := 0; i < 10; i++ {
 		i := i
-		fs[i] = Async(func() (int, error) {
+		fs[i] = Async(func() (interface{}, error) {
 			time.Sleep(time.Duration(vals[i]) * time.Millisecond)
 			if i != target && rand.Intn(2) == 0 { // random error
 				return 0, errFoo
@@ -242,7 +244,9 @@ func TestAnyOf(t *testing.T) {
 		})
 	}
 	f := AnyOf(fs...)
-	r, err := f.Get()
+	rr, err := f.Get()
+	// f**k
+	r := rr.(AnyResult)
 	assert.NoError(t, err)
 	assert.Equal(t, target, r.Index, target)
 	assert.Equal(t, vals[target], r.Val)
@@ -260,10 +264,10 @@ func TestAnyOfWhenAllErr(t *testing.T) {
 		}
 	}
 
-	fs := make([]*Future[int], 10)
+	fs := make([]*Future, 10)
 	for i := 0; i < 10; i++ {
 		i := i
-		fs[i] = Async(func() (int, error) {
+		fs[i] = Async(func() (interface{}, error) {
 			if i == target {
 				return 0, errFoo
 			}
@@ -272,7 +276,8 @@ func TestAnyOfWhenAllErr(t *testing.T) {
 		})
 	}
 	f := AnyOf(fs...)
-	r, err := f.Get()
+	rr, err := f.Get()
+	r := rr.(AnyResult)
 	assert.NoError(t, err)
 	assert.Equal(t, target, r.Index, target)
 	assert.Equal(t, 0, r.Val)
@@ -280,7 +285,7 @@ func TestAnyOfWhenAllErr(t *testing.T) {
 }
 
 func TestToAny(t *testing.T) {
-	f := Async(func() (int, error) {
+	f := Async(func() (interface{}, error) {
 		return 1, nil
 	})
 	ff := ToAny(f)
@@ -300,10 +305,10 @@ func TestAllOf(t *testing.T) {
 		}
 	}
 
-	fs := make([]*Future[int], 10)
+	fs := make([]*Future, 10)
 	for i := 0; i < 10; i++ {
 		i := i
-		fs[i] = Async(func() (int, error) {
+		fs[i] = Async(func() (interface{}, error) {
 			time.Sleep(time.Duration(vals[i]) * time.Millisecond)
 			return vals[i], nil
 		})
@@ -332,10 +337,10 @@ func TestAllOfWhenErr(t *testing.T) {
 		}
 	}
 
-	fs := make([]*Future[int], 10)
+	fs := make([]*Future, 10)
 	for i := 0; i < 10; i++ {
 		i := i
-		fs[i] = Async(func() (int, error) {
+		fs[i] = Async(func() (interface{}, error) {
 			time.Sleep(time.Duration(vals[i]) * time.Millisecond)
 			if i == target {
 				return 0, errFoo
@@ -363,7 +368,7 @@ func TestAllOfWhenErr(t *testing.T) {
 
 func TestTimeout(t *testing.T) {
 	{
-		f := Timeout(Async(func() (int, error) {
+		f := Timeout(Async(func() (interface{}, error) {
 			time.Sleep(time.Millisecond)
 			return 1, nil
 		}), time.Nanosecond)
@@ -372,7 +377,7 @@ func TestTimeout(t *testing.T) {
 		assert.ErrorIs(t, err, ErrTimeout)
 	}
 	{
-		f := Timeout(Async(func() (int, error) {
+		f := Timeout(Async(func() (interface{}, error) {
 			time.Sleep(time.Millisecond)
 			return 1, nil
 		}), 10*time.Millisecond)
@@ -384,7 +389,7 @@ func TestTimeout(t *testing.T) {
 
 func TestUntil(t *testing.T) {
 	{
-		f := Until(Async(func() (int, error) {
+		f := Until(Async(func() (interface{}, error) {
 			time.Sleep(time.Millisecond)
 			return 1, nil
 		}), time.Now().Add(time.Nanosecond))
@@ -393,7 +398,7 @@ func TestUntil(t *testing.T) {
 		assert.ErrorIs(t, err, ErrTimeout)
 	}
 	{
-		f := Until(Async(func() (int, error) {
+		f := Until(Async(func() (interface{}, error) {
 			time.Sleep(time.Millisecond)
 			return 1, nil
 		}), time.Now().Add(10*time.Millisecond))
