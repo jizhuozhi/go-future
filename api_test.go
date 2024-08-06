@@ -185,7 +185,8 @@ func TestThenAsync(t *testing.T) {
 				if err != nil {
 					return "", err
 				}
-				return val.(int), nil
+				v := val.(int)
+				return strconv.FormatInt(int64(v), 10), nil
 			})
 		})
 		p.Set(tt.val, tt.err)
@@ -216,7 +217,8 @@ func TestThenAsyncAfterDone(t *testing.T) {
 				if err != nil {
 					return "", err
 				}
-				return val.(int), nil
+				v := val.(int)
+				return strconv.FormatInt(int64(v), 10), nil
 			})
 		})
 		val, err := ff.Get()
