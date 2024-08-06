@@ -6,8 +6,14 @@
 The `Promise` provides a facility to store a value or an error that is later acquired asynchronously via a `Future` created by the `Promise` object. Note that the `Promise` object is meant to be used only once.
 
 Except for `Async`, all functions are event-driven, which means that no additional goroutines will be created to increase runtime scheduling overhead.
+
 ## Before start
 What I did was changed generic to the god-damn interface{}
+
+## For this forked repo
+``` shell 
+	go get github.com/SAYAKA-Konami/go-future/v8 
+```
 
 ## Benchmark
 
