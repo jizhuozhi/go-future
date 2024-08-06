@@ -1,4 +1,4 @@
-module github.com/SAYAKA-Konami/go-future
+module github.com/jizhuozhi/go-future/v8
 
 go 1.16
 
