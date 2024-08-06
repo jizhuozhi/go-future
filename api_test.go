@@ -3,6 +3,7 @@ package future
 import (
 	"math/rand"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -25,7 +26,7 @@ func TestAsyncPanic(t *testing.T) {
 		panic("panic")
 	})
 	val, err := f.Get()
-	assert.Equal(t, 0, val)
+	assert.Equal(t, nil, val)
 	assert.ErrorIs(t, err, ErrPanic)
 }
 
@@ -94,7 +95,8 @@ func TestThen(t *testing.T) {
 			if err != nil {
 				return "", err
 			}
-			return val.(int), nil
+			v := val.(int)
+			return strconv.FormatInt(int64(v), 10), nil
 		})
 		p.Set(tt.val, tt.err)
 		val, err := ff.Get()
@@ -123,7 +125,8 @@ func TestThenAfterDone(t *testing.T) {
 			if err != nil {
 				return "", err
 			}
-			return val.(int), nil
+			v := val.(int)
+			return strconv.FormatInt(int64(v), 10), nil
 		})
 		val, err := ff.Get()
 		assert.Equal(t, tt.rval, val)
@@ -142,7 +145,8 @@ func TestThenConcurrency(t *testing.T) {
 			// So call less is more huh.
 			// return i + r, nil
 			ii := i.(int)
-			return ii + r, nil
+			result := ii + r
+			return int64(result), nil
 		}
 	}
 	p := NewPromise()
