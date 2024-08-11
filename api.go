@@ -70,6 +70,10 @@ type AnyResult[T any] struct {
 }
 
 func AnyOf[T any](fs ...*Future[T]) *Future[AnyResult[T]] {
+	if len(fs) == 0 {
+		return Done(AnyResult[T]{Index: -1})
+	}
+
 	var counter int32
 	var done uint32
 	var errIndex int32 = -1

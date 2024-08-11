@@ -249,6 +249,16 @@ func TestAnyOf(t *testing.T) {
 	assert.Equal(t, nil, r.Err)
 }
 
+func TestAnyOfEmpty(t *testing.T) {
+	fs := make([]*Future[int], 0)
+	f := AnyOf(fs...)
+	r, err := f.Get()
+	assert.NoError(t, err)
+	assert.Equal(t, -1, r.Index)
+	assert.Zero(t, r.Val)
+	assert.NoError(t, r.Err)
+}
+
 func TestAnyOfWhenAllErr(t *testing.T) {
 	target := rand.Intn(10)
 	vals := make([]int, 10)
