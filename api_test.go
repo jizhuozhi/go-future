@@ -331,6 +331,14 @@ func TestAllOf(t *testing.T) {
 	}
 }
 
+func TestAllOfEmpty(t *testing.T) {
+	fs := make([]*Future[int], 0)
+	f := AllOf(fs...)
+	r, err := f.Get()
+	assert.Equal(t, struct{}{}, r)
+	assert.NoError(t, err)
+}
+
 func TestAllOfWhenErr(t *testing.T) {
 	target := rand.Intn(10)
 	vals := make([]int, 10)

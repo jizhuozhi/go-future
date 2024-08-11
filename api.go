@@ -105,6 +105,10 @@ func ToAny[T any](f *Future[T]) *Future[any] {
 }
 
 func AllOf[T any](fs ...*Future[T]) *Future[struct{}] {
+	if len(fs) == 0 {
+		return Done(struct{}{})
+	}
+
 	var done uint32
 	s := &state[struct{}]{}
 	c := int32(len(fs))
