@@ -35,8 +35,12 @@ func Lazy[T any](f func() (T, error)) *Future[T] {
 }
 
 func Done[T any](val T) *Future[T] {
+	return Done2(val, nil)
+}
+
+func Done2[T any](val T, err error) *Future[T] {
 	s := &state[T]{}
-	s.set(val, nil)
+	s.set(val, err)
 	return &Future[T]{state: s}
 }
 

@@ -68,6 +68,13 @@ func TestDone(t *testing.T) {
 	assert.Equal(t, nil, err)
 }
 
+func TestDone2(t *testing.T) {
+	f := Done2(1, errFoo)
+	val, err := f.Get()
+	assert.Equal(t, 1, val)
+	assert.Equal(t, errFoo, err)
+}
+
 func TestAwait(t *testing.T) {
 	f := Async(func() (int, error) {
 		return 1, nil
