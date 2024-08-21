@@ -70,6 +70,9 @@ type AnyResult struct {
 }
 
 func AnyOf(fs ...*Future) *Future {
+	if len(fs) == 0 {
+		return Done(AnyResult{})
+	}
 	var counter int32
 	var done uint32
 	var errIndex int32 = -1
@@ -101,6 +104,9 @@ func ToAny(f *Future) *Future {
 }
 
 func AllOf(fs ...*Future) *Future {
+	if len(fs) == 0 {
+		return Done(struct{}{})
+	}
 	var done uint32
 	s := &state{}
 	c := int32(len(fs))
