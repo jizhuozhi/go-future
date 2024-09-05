@@ -58,6 +58,16 @@ func TestPromiseSetTwice(t *testing.T) {
 	})
 }
 
+func TestPromiseSetSafetyTwice(t *testing.T) {
+	p := NewPromise[int]()
+	f := p.Future()
+	p.SetSafety(1, nil)
+	p.SetSafety(2, nil)
+	val, err := f.Get()
+	assert.Equal(t, 1, val)
+	assert.NoError(t, err)
+}
+
 func TestFutureSubscribe(t *testing.T) {
 	p := NewPromise[int]()
 	f := p.Future()

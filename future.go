@@ -46,11 +46,11 @@ type Future[T any] struct {
 	state *state[T]
 }
 
-func (s *state[T]) set(val T, err error) {
+func (s *state[T]) set(val T, err error) bool {
 	for {
 		st := atomic.LoadUint64(&s.state)
 		if !isFree(st) {
-			panic("promise already satisfied")
+			return false
 		}
 		if atomic.CompareAndSwapUint64(&s.state, st, st+stateDelta) {
 			s.val = val
@@ -69,7 +69,7 @@ func (s *state[T]) set(val T, err error) {
 					head.next = nil
 				}
 			}
-			return
+			return true
 		}
 	}
 }
@@ -135,7 +135,13 @@ func NewPromise[T any]() *Promise[T] {
 }
 
 func (p *Promise[T]) Set(val T, err error) {
-	p.state.set(val, err)
+	if !p.state.set(val, err) {
+		panic("promise already satisfied")
+	}
+}
+
+func (p *Promise[T]) SetSafety(val T, err error) bool {
+	return p.state.set(val, err)
 }
 
 func (p *Promise[T]) Future() *Future[T] {
