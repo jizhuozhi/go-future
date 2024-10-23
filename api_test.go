@@ -327,9 +327,9 @@ func TestAllOf(t *testing.T) {
 	}
 
 	f := AllOf(fs...)
-	_, err := f.Get()
+	results, err := f.Get()
+	assert.Equal(t, vals, results)
 	assert.NoError(t, err)
-
 	for i := 0; i < 10; i++ {
 		ff := fs[i]
 		val, err := ff.Get()
@@ -342,7 +342,7 @@ func TestAllOfEmpty(t *testing.T) {
 	fs := make([]*Future[int], 0)
 	f := AllOf(fs...)
 	r, err := f.Get()
-	assert.Equal(t, struct{}{}, r)
+	assert.Equal(t, []int(nil), r)
 	assert.NoError(t, err)
 }
 
