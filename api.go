@@ -1,6 +1,7 @@
 package future
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"runtime/debug"
@@ -23,6 +24,22 @@ func Async[T any](f func() (T, error)) *Future[T] {
 			s.set(val, err)
 		}()
 		val, err = f()
+	}()
+	return &Future[T]{state: s}
+}
+
+func CtxAsync[T any](ctx context.Context, f func(ctx context.Context) (T, error)) *Future[T] {
+	s := &state[T]{}
+	go func() {
+		var val T
+		var err error
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("%w, err=%s, stack=%s", ErrPanic, r, debug.Stack())
+			}
+			s.set(val, err)
+		}()
+		val, err = f(ctx)
 	}()
 	return &Future[T]{state: s}
 }

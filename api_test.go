@@ -1,6 +1,7 @@
 package future
 
 import (
+	"context"
 	"math/rand"
 	"runtime"
 	"strconv"
@@ -18,6 +19,16 @@ func TestAsync(t *testing.T) {
 	})
 	val, err := f.Get()
 	assert.Equal(t, 1, val)
+	assert.Equal(t, nil, err)
+}
+
+func TestCtxAsync(t *testing.T) {
+	ctx := context.WithValue(context.Background(), "foo", "bar")
+	f := CtxAsync(ctx, func(ctx context.Context) (any, error) {
+		return ctx.Value("foo"), nil
+	})
+	val, err := f.Get()
+	assert.Equal(t, "bar", val)
 	assert.Equal(t, nil, err)
 }
 
