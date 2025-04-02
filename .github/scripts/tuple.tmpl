@@ -1,0 +1,9 @@
+package future
+
+{{- range $i := .Tuples }}
+type Tuple{{len .TypeParams}}[{{range $j := .TypeParams}}{{if $j.NotFirst}}, {{end}}{{$j.Name}}{{end}} any] struct {
+{{- range $j := .Fields}}
+	{{$j.Name}} {{$j.Type}}
+{{- end}}
+}
+{{end}}
