@@ -43,6 +43,14 @@ func Go(f func()) *Future[any] {
 	return Async(wrapper)
 }
 
+func CtxGo(ctx context.Context, f func(ctx context.Context)) *Future[any] {
+	wrapper := func(ctx context.Context) (any, error) {
+		f(ctx)
+		return true, nil
+	}
+	return CtxAsync(ctx, wrapper)
+}
+
 func CtxAsync[T any](ctx context.Context, f func(ctx context.Context) (T, error)) *Future[T] {
 	s := &state[T]{}
 	go func() {

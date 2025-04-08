@@ -455,3 +455,20 @@ func TestGo(t *testing.T) {
 	of := AllOf(first, second)
 	of.Get()
 }
+
+func TestCtxGo(t *testing.T) {
+	ctx := context.WithValue(context.Background(), "foo", "bar")
+
+	first := Go(func() {
+		time.Sleep(1000 * time.Millisecond)
+		t.Log("First task complete. Value in context: ", ctx.Value("foo"))
+	})
+
+	second := Go(func() {
+		time.Sleep(2000 * time.Millisecond)
+		t.Log("Second task complete. Value in context: ", ctx.Value("foo"))
+	})
+
+	of := AllOf(first, second)
+	of.Get()
+}
