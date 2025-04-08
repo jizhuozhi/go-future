@@ -69,7 +69,7 @@ func (s *state[T]) set(val T, err error) bool {
 					break
 				}
 				if atomic.CompareAndSwapPointer(&s.stack, unsafe.Pointer(head), unsafe.Pointer(head.next)) {
-					head.f(val, err)
+					head.execOnce(val, err)
 					head.next = nil
 				}
 			}
@@ -119,17 +119,11 @@ func (s *state[T]) subscribe(cb func(T, error)) {
 
 		newCb.next = oldCb
 		if atomic.CompareAndSwapPointer(&s.stack, unsafe.Pointer(oldCb), unsafe.Pointer(newCb)) {
-			for {
-				// Double-check the state to ensure the callback is not missed
-				if isDone(atomic.LoadUint64(&s.state)) {
-					if atomic.CompareAndSwapPointer(&s.stack, unsafe.Pointer(newCb), unsafe.Pointer(newCb.next)) {
-						cb(s.val, s.err)
-						return
-					}
-				} else {
-					return
-				}
+			// Double-check the state to ensure the callback is not missed
+			if isDone(atomic.LoadUint64(&s.state)) {
+				newCb.execOnce(s.val, s.err)
 			}
+			return
 		}
 	}
 }
@@ -209,8 +203,16 @@ type state[T any] struct {
 }
 
 type callback[T any] struct {
+	mark uint32
+
 	f    func(T, error)
 	next *callback[T]
+}
+
+func (cb *callback[T]) execOnce(val T, err error) {
+	if atomic.CompareAndSwapUint32(&cb.mark, 0, 1) {
+		cb.f(val, err)
+	}
 }
 
 // noCopy may be embedded into structs which must not be copied

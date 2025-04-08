@@ -4,6 +4,7 @@ import (
 	"errors"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -82,6 +83,39 @@ func TestFutureSubscribe(t *testing.T) {
 	p.Set(1, nil)
 	assert.Equal(t, val1, 2)
 	assert.Equal(t, val2, 3)
+}
+
+func TestFutureSubscribeConcurrency(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		n := 1000
+
+		ch := make(chan struct{}, n)
+		p := NewPromise[int]()
+		go func() {
+			for i := 0; i < n; i++ {
+				ch <- struct{}{}
+			}
+			p.Set(1, errFoo)
+		}()
+
+		var counter int32
+		wg := sync.WaitGroup{}
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func() {
+				<-ch
+				f := p.Future()
+
+				f.Subscribe(func(val int, err error) {
+					defer wg.Done()
+					atomic.AddInt32(&counter, 1)
+				})
+			}()
+		}
+		wg.Wait()
+
+		assert.Equal(t, int32(n), atomic.LoadInt32(&counter))
+	}
 }
 
 func TestPromiseFreeAndFutureDone(t *testing.T) {
