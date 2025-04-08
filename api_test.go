@@ -438,3 +438,20 @@ func TestUntil(t *testing.T) {
 		assert.NoError(t, err)
 	}
 }
+
+func TestGo(t *testing.T) {
+	first := Go(func() {
+		before := time.Now()
+		time.Sleep(1000 * time.Millisecond)
+		t.Log("First task complete. cost: ", time.Since(before).Milliseconds())
+	})
+
+	second := Go(func() {
+		before := time.Now()
+		time.Sleep(2000 * time.Millisecond)
+		t.Log("Second task complete. cost: ", time.Since(before).Milliseconds())
+	})
+
+	of := AllOf(first, second)
+	of.Get()
+}

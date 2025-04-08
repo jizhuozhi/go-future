@@ -28,6 +28,21 @@ func Async[T any](f func() (T, error)) *Future[T] {
 	return &Future[T]{state: s}
 }
 
+// Go Just safely do the async.
+//
+//	 data := queryFromDB()	// Suppose you want to cache the data queried from db.
+//	 future.Go(func() {
+//			err := cache.save(data) 	// Any panic here will be wrapped by future.
+//	     log(err)
+//		})
+func Go(f func()) *Future[any] {
+	wrapper := func() (any, error) {
+		f()
+		return true, nil
+	}
+	return Async(wrapper)
+}
+
 func CtxAsync[T any](ctx context.Context, f func(ctx context.Context) (T, error)) *Future[T] {
 	s := &state[T]{}
 	go func() {
