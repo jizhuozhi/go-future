@@ -199,14 +199,13 @@ func isDone(st uint64) bool {
 type state[T any] struct {
 	noCopy noCopy
 
-	state uint64 // high 30 bits are flags, mid 2 bits are state, low 32 bits are waiter count.
+	state uint64         // high 30 bits are flags, mid 2 bits are state, low 32 bits are waiter count.
+	stack unsafe.Pointer // *callback[T]
 	sema  uint32
 
 	val T
 	err error
 	f   func() (T, error)
-
-	stack unsafe.Pointer // *callback[T]
 }
 
 type callback[T any] struct {
