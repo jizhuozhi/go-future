@@ -413,3 +413,23 @@ func TestUntil(t *testing.T) {
 		assert.NoError(t, err)
 	}
 }
+
+func TestAsyncThen(t *testing.T) {
+	begin := time.Now()
+	f1 := Async(func() (interface{}, error) {
+		time.Sleep(200 * time.Millisecond)
+		return "first done", nil
+	})
+	final := ThenAsync(f1, func(i interface{}, err error) *Future {
+		str := i.(string)
+		return Async(func() (interface{}, error) {
+			// do your job here.
+			time.Sleep(300 * time.Millisecond)
+			return str + " second done", nil
+		})
+	})
+	t.Log(time.Now().Unix() - begin.Unix())
+	get, err := final.Get()
+	assert.NoError(t, err)
+	t.Log(get)
+}
