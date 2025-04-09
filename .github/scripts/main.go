@@ -9,6 +9,9 @@ import (
 	"text/template"
 )
 
+var count int
+var outputDir string
+
 func joinWithComma(items []string) string {
 	return strings.Join(items, ", ")
 }
@@ -60,15 +63,15 @@ type TupleData struct {
 }
 
 func main() {
-	count := flag.Int("count", 16, "the count of tuple types to generate")
-	outputDir := flag.String("outputDir", "../../", "the dir of output file")
+	flag.IntVar(&count, "count", 16, "the count of tuple types to generate")
+	flag.StringVar(&outputDir, "outputDir", "../../", "the dir of output file")
 	flag.Parse()
 
 	// Prepare template data
 	data := TupleData{}
-	data.Tuples = make([]TupleInfo, *count-1)
+	data.Tuples = make([]TupleInfo, count-1)
 
-	for i := 2; i <= *count; i++ {
+	for i := 2; i <= count; i++ {
 		tuple := &data.Tuples[i-2]
 
 		// Generate type parameters and tuple type
@@ -139,7 +142,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tuplePath := filepath.Join(*outputDir, "tuple.go")
+	tuplePath := filepath.Join(outputDir, "tuple.go")
 	tuplefile, err := os.Create(tuplePath)
 	if err != nil {
 		fmt.Printf("Error creating tuple.go: %v\n", err)
@@ -159,7 +162,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ofPath := filepath.Join(*outputDir, "of.go")
+	ofPath := filepath.Join(outputDir, "of.go")
 	offile, err := os.Create(ofPath)
 	if err != nil {
 		fmt.Printf("Error creating of.go: %v\n", err)
@@ -169,6 +172,64 @@ func main() {
 
 	if err := ofTmpl.Execute(offile, data); err != nil {
 		fmt.Printf("Error executing of template: %v\n", err)
+		os.Exit(1)
+	}
+
+	generateOfTest()
+}
+
+type TestCaseData struct {
+	TestCases []TestCaseInfo
+}
+
+type TestCaseInfo struct {
+	Name    string
+	Futures []TestCaseFutureInfo
+}
+
+type TestCaseFutureInfo struct {
+	Name     string
+	Type     string
+	Val      string
+	NotFirst bool
+}
+
+func generateOfTest() {
+	// Prepare template data
+	data := TestCaseData{}
+	data.TestCases = make([]TestCaseInfo, 0, count-1)
+
+	for i := 2; i <= count; i++ {
+		testcase := TestCaseInfo{
+			Name: fmt.Sprintf("TestOf%d", i),
+		}
+		for j := 0; j < i; j++ {
+			testcase.Futures = append(testcase.Futures, TestCaseFutureInfo{
+				Name:     fmt.Sprintf("f%d", j),
+				Type:     "int",
+				Val:      fmt.Sprintf("%v", j),
+				NotFirst: j > 0,
+			})
+		}
+		data.TestCases = append(data.TestCases, testcase)
+	}
+
+	ofTestTmpl, err := template.ParseFiles("of_test.tmpl")
+	if err != nil {
+		fmt.Printf("Error parsing of_test template: %v\n", err)
+		os.Exit(1)
+	}
+
+	ofTestPath := filepath.Join(outputDir, "of_test.go")
+	ofTestFile, err := os.Create(ofTestPath)
+	if err != nil {
+		fmt.Printf("Error creating of_test.go: %v\n", err)
+		os.Exit(1)
+	}
+	defer ofTestFile.Close()
+
+	if err := ofTestTmpl.Execute(ofTestFile, data); err != nil {
+		fmt.Printf("Error executing of_test template: %v\n", err)
 		os.Exit(1)
 	}
 }

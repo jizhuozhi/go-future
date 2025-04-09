@@ -5,7 +5,6 @@ package future
 import (
 	"sync/atomic"
 )
-
 func Of2[T0, T1 any](t0 *Future[T0], t1 *Future[T1]) *Future[Tuple2[T0, T1]] {
 	var done uint32
 	s := &state[Tuple2[T0, T1]]{}
@@ -13,29 +12,25 @@ func Of2[T0, T1 any](t0 *Future[T0], t1 *Future[T1]) *Future[Tuple2[T0, T1]] {
 
 	var res0 T0
 	var res1 T1
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple2[T0, T1]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple2[T0, T1]{res0, res1}, nil)
+				s.set(Tuple2[T0, T1]{res0, res1 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple2[T0, T1]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple2[T0, T1]{res0, res1}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 
 	return &Future[Tuple2[T0, T1]]{state: s}
@@ -49,41 +44,29 @@ func Of3[T0, T1, T2 any](t0 *Future[T0], t1 *Future[T1], t2 *Future[T2]) *Future
 	var res0 T0
 	var res1 T1
 	var res2 T2
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple3[T0, T1, T2]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple3[T0, T1, T2]{res0, res1, res2}, nil)
+				s.set(Tuple3[T0, T1, T2]{res0, res1, res2 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple3[T0, T1, T2]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple3[T0, T1, T2]{res0, res1, res2}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple3[T0, T1, T2]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple3[T0, T1, T2]{res0, res1, res2}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 
 	return &Future[Tuple3[T0, T1, T2]]{state: s}
@@ -98,53 +81,33 @@ func Of4[T0, T1, T2, T3 any](t0 *Future[T0], t1 *Future[T1], t2 *Future[T2], t3 
 	var res1 T1
 	var res2 T2
 	var res3 T3
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple4[T0, T1, T2, T3]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple4[T0, T1, T2, T3]{res0, res1, res2, res3}, nil)
+				s.set(Tuple4[T0, T1, T2, T3]{res0, res1, res2, res3 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple4[T0, T1, T2, T3]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple4[T0, T1, T2, T3]{res0, res1, res2, res3}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple4[T0, T1, T2, T3]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple4[T0, T1, T2, T3]{res0, res1, res2, res3}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 	t3.state.subscribe(func(val T3, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple4[T0, T1, T2, T3]{}, err)
-			}
-		} else {
-			res3 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple4[T0, T1, T2, T3]{res0, res1, res2, res3}, nil)
-			}
-		}
+		res3 = val
+		cb(err)
 	})
 
 	return &Future[Tuple4[T0, T1, T2, T3]]{state: s}
@@ -160,65 +123,37 @@ func Of5[T0, T1, T2, T3, T4 any](t0 *Future[T0], t1 *Future[T1], t2 *Future[T2],
 	var res2 T2
 	var res3 T3
 	var res4 T4
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple5[T0, T1, T2, T3, T4]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple5[T0, T1, T2, T3, T4]{res0, res1, res2, res3, res4}, nil)
+				s.set(Tuple5[T0, T1, T2, T3, T4]{res0, res1, res2, res3, res4 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple5[T0, T1, T2, T3, T4]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple5[T0, T1, T2, T3, T4]{res0, res1, res2, res3, res4}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple5[T0, T1, T2, T3, T4]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple5[T0, T1, T2, T3, T4]{res0, res1, res2, res3, res4}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 	t3.state.subscribe(func(val T3, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple5[T0, T1, T2, T3, T4]{}, err)
-			}
-		} else {
-			res3 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple5[T0, T1, T2, T3, T4]{res0, res1, res2, res3, res4}, nil)
-			}
-		}
+		res3 = val
+		cb(err)
 	})
 	t4.state.subscribe(func(val T4, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple5[T0, T1, T2, T3, T4]{}, err)
-			}
-		} else {
-			res4 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple5[T0, T1, T2, T3, T4]{res0, res1, res2, res3, res4}, nil)
-			}
-		}
+		res4 = val
+		cb(err)
 	})
 
 	return &Future[Tuple5[T0, T1, T2, T3, T4]]{state: s}
@@ -235,77 +170,41 @@ func Of6[T0, T1, T2, T3, T4, T5 any](t0 *Future[T0], t1 *Future[T1], t2 *Future[
 	var res3 T3
 	var res4 T4
 	var res5 T5
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple6[T0, T1, T2, T3, T4, T5]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple6[T0, T1, T2, T3, T4, T5]{res0, res1, res2, res3, res4, res5}, nil)
+				s.set(Tuple6[T0, T1, T2, T3, T4, T5]{res0, res1, res2, res3, res4, res5 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple6[T0, T1, T2, T3, T4, T5]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple6[T0, T1, T2, T3, T4, T5]{res0, res1, res2, res3, res4, res5}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple6[T0, T1, T2, T3, T4, T5]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple6[T0, T1, T2, T3, T4, T5]{res0, res1, res2, res3, res4, res5}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 	t3.state.subscribe(func(val T3, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple6[T0, T1, T2, T3, T4, T5]{}, err)
-			}
-		} else {
-			res3 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple6[T0, T1, T2, T3, T4, T5]{res0, res1, res2, res3, res4, res5}, nil)
-			}
-		}
+		res3 = val
+		cb(err)
 	})
 	t4.state.subscribe(func(val T4, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple6[T0, T1, T2, T3, T4, T5]{}, err)
-			}
-		} else {
-			res4 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple6[T0, T1, T2, T3, T4, T5]{res0, res1, res2, res3, res4, res5}, nil)
-			}
-		}
+		res4 = val
+		cb(err)
 	})
 	t5.state.subscribe(func(val T5, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple6[T0, T1, T2, T3, T4, T5]{}, err)
-			}
-		} else {
-			res5 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple6[T0, T1, T2, T3, T4, T5]{res0, res1, res2, res3, res4, res5}, nil)
-			}
-		}
+		res5 = val
+		cb(err)
 	})
 
 	return &Future[Tuple6[T0, T1, T2, T3, T4, T5]]{state: s}
@@ -323,89 +222,45 @@ func Of7[T0, T1, T2, T3, T4, T5, T6 any](t0 *Future[T0], t1 *Future[T1], t2 *Fut
 	var res4 T4
 	var res5 T5
 	var res6 T6
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{res0, res1, res2, res3, res4, res5, res6}, nil)
+				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{res0, res1, res2, res3, res4, res5, res6 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{res0, res1, res2, res3, res4, res5, res6}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{res0, res1, res2, res3, res4, res5, res6}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 	t3.state.subscribe(func(val T3, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{}, err)
-			}
-		} else {
-			res3 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{res0, res1, res2, res3, res4, res5, res6}, nil)
-			}
-		}
+		res3 = val
+		cb(err)
 	})
 	t4.state.subscribe(func(val T4, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{}, err)
-			}
-		} else {
-			res4 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{res0, res1, res2, res3, res4, res5, res6}, nil)
-			}
-		}
+		res4 = val
+		cb(err)
 	})
 	t5.state.subscribe(func(val T5, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{}, err)
-			}
-		} else {
-			res5 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{res0, res1, res2, res3, res4, res5, res6}, nil)
-			}
-		}
+		res5 = val
+		cb(err)
 	})
 	t6.state.subscribe(func(val T6, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{}, err)
-			}
-		} else {
-			res6 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple7[T0, T1, T2, T3, T4, T5, T6]{res0, res1, res2, res3, res4, res5, res6}, nil)
-			}
-		}
+		res6 = val
+		cb(err)
 	})
 
 	return &Future[Tuple7[T0, T1, T2, T3, T4, T5, T6]]{state: s}
@@ -424,101 +279,49 @@ func Of8[T0, T1, T2, T3, T4, T5, T6, T7 any](t0 *Future[T0], t1 *Future[T1], t2 
 	var res5 T5
 	var res6 T6
 	var res7 T7
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{res0, res1, res2, res3, res4, res5, res6, res7}, nil)
+				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{res0, res1, res2, res3, res4, res5, res6, res7 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{res0, res1, res2, res3, res4, res5, res6, res7}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{res0, res1, res2, res3, res4, res5, res6, res7}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 	t3.state.subscribe(func(val T3, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{}, err)
-			}
-		} else {
-			res3 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{res0, res1, res2, res3, res4, res5, res6, res7}, nil)
-			}
-		}
+		res3 = val
+		cb(err)
 	})
 	t4.state.subscribe(func(val T4, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{}, err)
-			}
-		} else {
-			res4 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{res0, res1, res2, res3, res4, res5, res6, res7}, nil)
-			}
-		}
+		res4 = val
+		cb(err)
 	})
 	t5.state.subscribe(func(val T5, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{}, err)
-			}
-		} else {
-			res5 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{res0, res1, res2, res3, res4, res5, res6, res7}, nil)
-			}
-		}
+		res5 = val
+		cb(err)
 	})
 	t6.state.subscribe(func(val T6, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{}, err)
-			}
-		} else {
-			res6 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{res0, res1, res2, res3, res4, res5, res6, res7}, nil)
-			}
-		}
+		res6 = val
+		cb(err)
 	})
 	t7.state.subscribe(func(val T7, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{}, err)
-			}
-		} else {
-			res7 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]{res0, res1, res2, res3, res4, res5, res6, res7}, nil)
-			}
-		}
+		res7 = val
+		cb(err)
 	})
 
 	return &Future[Tuple8[T0, T1, T2, T3, T4, T5, T6, T7]]{state: s}
@@ -538,113 +341,53 @@ func Of9[T0, T1, T2, T3, T4, T5, T6, T7, T8 any](t0 *Future[T0], t1 *Future[T1],
 	var res6 T6
 	var res7 T7
 	var res8 T8
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{res0, res1, res2, res3, res4, res5, res6, res7, res8}, nil)
+				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{res0, res1, res2, res3, res4, res5, res6, res7, res8 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{res0, res1, res2, res3, res4, res5, res6, res7, res8}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{res0, res1, res2, res3, res4, res5, res6, res7, res8}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 	t3.state.subscribe(func(val T3, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{}, err)
-			}
-		} else {
-			res3 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{res0, res1, res2, res3, res4, res5, res6, res7, res8}, nil)
-			}
-		}
+		res3 = val
+		cb(err)
 	})
 	t4.state.subscribe(func(val T4, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{}, err)
-			}
-		} else {
-			res4 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{res0, res1, res2, res3, res4, res5, res6, res7, res8}, nil)
-			}
-		}
+		res4 = val
+		cb(err)
 	})
 	t5.state.subscribe(func(val T5, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{}, err)
-			}
-		} else {
-			res5 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{res0, res1, res2, res3, res4, res5, res6, res7, res8}, nil)
-			}
-		}
+		res5 = val
+		cb(err)
 	})
 	t6.state.subscribe(func(val T6, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{}, err)
-			}
-		} else {
-			res6 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{res0, res1, res2, res3, res4, res5, res6, res7, res8}, nil)
-			}
-		}
+		res6 = val
+		cb(err)
 	})
 	t7.state.subscribe(func(val T7, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{}, err)
-			}
-		} else {
-			res7 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{res0, res1, res2, res3, res4, res5, res6, res7, res8}, nil)
-			}
-		}
+		res7 = val
+		cb(err)
 	})
 	t8.state.subscribe(func(val T8, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{}, err)
-			}
-		} else {
-			res8 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]{res0, res1, res2, res3, res4, res5, res6, res7, res8}, nil)
-			}
-		}
+		res8 = val
+		cb(err)
 	})
 
 	return &Future[Tuple9[T0, T1, T2, T3, T4, T5, T6, T7, T8]]{state: s}
@@ -665,125 +408,57 @@ func Of10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9 any](t0 *Future[T0], t1 *Future
 	var res7 T7
 	var res8 T8
 	var res9 T9
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9}, nil)
+				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 	t3.state.subscribe(func(val T3, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{}, err)
-			}
-		} else {
-			res3 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9}, nil)
-			}
-		}
+		res3 = val
+		cb(err)
 	})
 	t4.state.subscribe(func(val T4, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{}, err)
-			}
-		} else {
-			res4 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9}, nil)
-			}
-		}
+		res4 = val
+		cb(err)
 	})
 	t5.state.subscribe(func(val T5, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{}, err)
-			}
-		} else {
-			res5 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9}, nil)
-			}
-		}
+		res5 = val
+		cb(err)
 	})
 	t6.state.subscribe(func(val T6, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{}, err)
-			}
-		} else {
-			res6 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9}, nil)
-			}
-		}
+		res6 = val
+		cb(err)
 	})
 	t7.state.subscribe(func(val T7, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{}, err)
-			}
-		} else {
-			res7 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9}, nil)
-			}
-		}
+		res7 = val
+		cb(err)
 	})
 	t8.state.subscribe(func(val T8, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{}, err)
-			}
-		} else {
-			res8 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9}, nil)
-			}
-		}
+		res8 = val
+		cb(err)
 	})
 	t9.state.subscribe(func(val T9, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{}, err)
-			}
-		} else {
-			res9 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9}, nil)
-			}
-		}
+		res9 = val
+		cb(err)
 	})
 
 	return &Future[Tuple10[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9]]{state: s}
@@ -805,137 +480,61 @@ func Of11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10 any](t0 *Future[T0], t1 *F
 	var res8 T8
 	var res9 T9
 	var res10 T10
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10}, nil)
+				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 	t3.state.subscribe(func(val T3, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{}, err)
-			}
-		} else {
-			res3 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10}, nil)
-			}
-		}
+		res3 = val
+		cb(err)
 	})
 	t4.state.subscribe(func(val T4, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{}, err)
-			}
-		} else {
-			res4 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10}, nil)
-			}
-		}
+		res4 = val
+		cb(err)
 	})
 	t5.state.subscribe(func(val T5, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{}, err)
-			}
-		} else {
-			res5 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10}, nil)
-			}
-		}
+		res5 = val
+		cb(err)
 	})
 	t6.state.subscribe(func(val T6, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{}, err)
-			}
-		} else {
-			res6 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10}, nil)
-			}
-		}
+		res6 = val
+		cb(err)
 	})
 	t7.state.subscribe(func(val T7, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{}, err)
-			}
-		} else {
-			res7 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10}, nil)
-			}
-		}
+		res7 = val
+		cb(err)
 	})
 	t8.state.subscribe(func(val T8, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{}, err)
-			}
-		} else {
-			res8 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10}, nil)
-			}
-		}
+		res8 = val
+		cb(err)
 	})
 	t9.state.subscribe(func(val T9, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{}, err)
-			}
-		} else {
-			res9 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10}, nil)
-			}
-		}
+		res9 = val
+		cb(err)
 	})
 	t10.state.subscribe(func(val T10, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{}, err)
-			}
-		} else {
-			res10 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10}, nil)
-			}
-		}
+		res10 = val
+		cb(err)
 	})
 
 	return &Future[Tuple11[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]]{state: s}
@@ -958,149 +557,65 @@ func Of12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11 any](t0 *Future[T0], 
 	var res9 T9
 	var res10 T10
 	var res11 T11
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11}, nil)
+				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 	t3.state.subscribe(func(val T3, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{}, err)
-			}
-		} else {
-			res3 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11}, nil)
-			}
-		}
+		res3 = val
+		cb(err)
 	})
 	t4.state.subscribe(func(val T4, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{}, err)
-			}
-		} else {
-			res4 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11}, nil)
-			}
-		}
+		res4 = val
+		cb(err)
 	})
 	t5.state.subscribe(func(val T5, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{}, err)
-			}
-		} else {
-			res5 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11}, nil)
-			}
-		}
+		res5 = val
+		cb(err)
 	})
 	t6.state.subscribe(func(val T6, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{}, err)
-			}
-		} else {
-			res6 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11}, nil)
-			}
-		}
+		res6 = val
+		cb(err)
 	})
 	t7.state.subscribe(func(val T7, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{}, err)
-			}
-		} else {
-			res7 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11}, nil)
-			}
-		}
+		res7 = val
+		cb(err)
 	})
 	t8.state.subscribe(func(val T8, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{}, err)
-			}
-		} else {
-			res8 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11}, nil)
-			}
-		}
+		res8 = val
+		cb(err)
 	})
 	t9.state.subscribe(func(val T9, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{}, err)
-			}
-		} else {
-			res9 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11}, nil)
-			}
-		}
+		res9 = val
+		cb(err)
 	})
 	t10.state.subscribe(func(val T10, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{}, err)
-			}
-		} else {
-			res10 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11}, nil)
-			}
-		}
+		res10 = val
+		cb(err)
 	})
 	t11.state.subscribe(func(val T11, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{}, err)
-			}
-		} else {
-			res11 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11}, nil)
-			}
-		}
+		res11 = val
+		cb(err)
 	})
 
 	return &Future[Tuple12[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11]]{state: s}
@@ -1124,161 +639,69 @@ func Of13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12 any](t0 *Future[
 	var res10 T10
 	var res11 T11
 	var res12 T12
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12}, nil)
+				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 	t3.state.subscribe(func(val T3, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{}, err)
-			}
-		} else {
-			res3 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12}, nil)
-			}
-		}
+		res3 = val
+		cb(err)
 	})
 	t4.state.subscribe(func(val T4, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{}, err)
-			}
-		} else {
-			res4 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12}, nil)
-			}
-		}
+		res4 = val
+		cb(err)
 	})
 	t5.state.subscribe(func(val T5, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{}, err)
-			}
-		} else {
-			res5 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12}, nil)
-			}
-		}
+		res5 = val
+		cb(err)
 	})
 	t6.state.subscribe(func(val T6, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{}, err)
-			}
-		} else {
-			res6 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12}, nil)
-			}
-		}
+		res6 = val
+		cb(err)
 	})
 	t7.state.subscribe(func(val T7, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{}, err)
-			}
-		} else {
-			res7 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12}, nil)
-			}
-		}
+		res7 = val
+		cb(err)
 	})
 	t8.state.subscribe(func(val T8, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{}, err)
-			}
-		} else {
-			res8 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12}, nil)
-			}
-		}
+		res8 = val
+		cb(err)
 	})
 	t9.state.subscribe(func(val T9, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{}, err)
-			}
-		} else {
-			res9 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12}, nil)
-			}
-		}
+		res9 = val
+		cb(err)
 	})
 	t10.state.subscribe(func(val T10, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{}, err)
-			}
-		} else {
-			res10 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12}, nil)
-			}
-		}
+		res10 = val
+		cb(err)
 	})
 	t11.state.subscribe(func(val T11, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{}, err)
-			}
-		} else {
-			res11 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12}, nil)
-			}
-		}
+		res11 = val
+		cb(err)
 	})
 	t12.state.subscribe(func(val T12, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{}, err)
-			}
-		} else {
-			res12 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12}, nil)
-			}
-		}
+		res12 = val
+		cb(err)
 	})
 
 	return &Future[Tuple13[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12]]{state: s}
@@ -1303,173 +726,73 @@ func Of14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13 any](t0 *Fu
 	var res11 T11
 	var res12 T12
 	var res13 T13
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
+				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 	t3.state.subscribe(func(val T3, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
-			}
-		} else {
-			res3 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
-			}
-		}
+		res3 = val
+		cb(err)
 	})
 	t4.state.subscribe(func(val T4, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
-			}
-		} else {
-			res4 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
-			}
-		}
+		res4 = val
+		cb(err)
 	})
 	t5.state.subscribe(func(val T5, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
-			}
-		} else {
-			res5 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
-			}
-		}
+		res5 = val
+		cb(err)
 	})
 	t6.state.subscribe(func(val T6, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
-			}
-		} else {
-			res6 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
-			}
-		}
+		res6 = val
+		cb(err)
 	})
 	t7.state.subscribe(func(val T7, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
-			}
-		} else {
-			res7 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
-			}
-		}
+		res7 = val
+		cb(err)
 	})
 	t8.state.subscribe(func(val T8, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
-			}
-		} else {
-			res8 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
-			}
-		}
+		res8 = val
+		cb(err)
 	})
 	t9.state.subscribe(func(val T9, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
-			}
-		} else {
-			res9 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
-			}
-		}
+		res9 = val
+		cb(err)
 	})
 	t10.state.subscribe(func(val T10, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
-			}
-		} else {
-			res10 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
-			}
-		}
+		res10 = val
+		cb(err)
 	})
 	t11.state.subscribe(func(val T11, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
-			}
-		} else {
-			res11 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
-			}
-		}
+		res11 = val
+		cb(err)
 	})
 	t12.state.subscribe(func(val T12, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
-			}
-		} else {
-			res12 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
-			}
-		}
+		res12 = val
+		cb(err)
 	})
 	t13.state.subscribe(func(val T13, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{}, err)
-			}
-		} else {
-			res13 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13}, nil)
-			}
-		}
+		res13 = val
+		cb(err)
 	})
 
 	return &Future[Tuple14[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13]]{state: s}
@@ -1495,185 +818,77 @@ func Of15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14 any](t
 	var res12 T12
 	var res13 T13
 	var res14 T14
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
+				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 	t3.state.subscribe(func(val T3, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res3 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res3 = val
+		cb(err)
 	})
 	t4.state.subscribe(func(val T4, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res4 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res4 = val
+		cb(err)
 	})
 	t5.state.subscribe(func(val T5, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res5 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res5 = val
+		cb(err)
 	})
 	t6.state.subscribe(func(val T6, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res6 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res6 = val
+		cb(err)
 	})
 	t7.state.subscribe(func(val T7, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res7 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res7 = val
+		cb(err)
 	})
 	t8.state.subscribe(func(val T8, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res8 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res8 = val
+		cb(err)
 	})
 	t9.state.subscribe(func(val T9, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res9 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res9 = val
+		cb(err)
 	})
 	t10.state.subscribe(func(val T10, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res10 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res10 = val
+		cb(err)
 	})
 	t11.state.subscribe(func(val T11, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res11 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res11 = val
+		cb(err)
 	})
 	t12.state.subscribe(func(val T12, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res12 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res12 = val
+		cb(err)
 	})
 	t13.state.subscribe(func(val T13, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res13 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res13 = val
+		cb(err)
 	})
 	t14.state.subscribe(func(val T14, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{}, err)
-			}
-		} else {
-			res14 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14}, nil)
-			}
-		}
+		res14 = val
+		cb(err)
 	})
 
 	return &Future[Tuple15[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14]]{state: s}
@@ -1700,197 +915,81 @@ func Of16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15 a
 	var res13 T13
 	var res14 T14
 	var res15 T15
-	t0.state.subscribe(func(val T0, err error) {
-		if err != nil {
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
 			}
 		} else {
-			res0 = val
 			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
+				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15 }, nil)
 			}
 		}
+	}
+	t0.state.subscribe(func(val T0, err error) {
+		res0 = val
+		cb(err)
 	})
 	t1.state.subscribe(func(val T1, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res1 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res1 = val
+		cb(err)
 	})
 	t2.state.subscribe(func(val T2, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res2 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res2 = val
+		cb(err)
 	})
 	t3.state.subscribe(func(val T3, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res3 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res3 = val
+		cb(err)
 	})
 	t4.state.subscribe(func(val T4, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res4 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res4 = val
+		cb(err)
 	})
 	t5.state.subscribe(func(val T5, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res5 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res5 = val
+		cb(err)
 	})
 	t6.state.subscribe(func(val T6, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res6 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res6 = val
+		cb(err)
 	})
 	t7.state.subscribe(func(val T7, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res7 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res7 = val
+		cb(err)
 	})
 	t8.state.subscribe(func(val T8, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res8 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res8 = val
+		cb(err)
 	})
 	t9.state.subscribe(func(val T9, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res9 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res9 = val
+		cb(err)
 	})
 	t10.state.subscribe(func(val T10, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res10 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res10 = val
+		cb(err)
 	})
 	t11.state.subscribe(func(val T11, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res11 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res11 = val
+		cb(err)
 	})
 	t12.state.subscribe(func(val T12, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res12 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res12 = val
+		cb(err)
 	})
 	t13.state.subscribe(func(val T13, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res13 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res13 = val
+		cb(err)
 	})
 	t14.state.subscribe(func(val T14, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res14 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res14 = val
+		cb(err)
 	})
 	t15.state.subscribe(func(val T15, err error) {
-		if err != nil {
-			if atomic.CompareAndSwapUint32(&done, 0, 1) {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{}, err)
-			}
-		} else {
-			res15 = val
-			if atomic.AddInt32(&c, -1) == 0 {
-				s.set(Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]{res0, res1, res2, res3, res4, res5, res6, res7, res8, res9, res10, res11, res12, res13, res14, res15}, nil)
-			}
-		}
+		res15 = val
+		cb(err)
 	})
 
 	return &Future[Tuple16[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15]]{state: s}

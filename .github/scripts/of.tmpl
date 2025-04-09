@@ -15,19 +15,24 @@ func Of{{len .TypeParams}}[{{range $j := .TypeParams}}{{if $j.NotFirst}}, {{end}
 	var {{$j.Name}} {{$j.Type}}
 {{- end}}
 
-{{- $tuple := . -}}
-{{range $j := .SubscribeBlocks}}
-	{{$j.Future}}.state.subscribe(func(val {{$j.Type}}, err error) {
-		if err != nil {
+{{- $tuple := . }}
+
+	cb := func(err error) {
+        if err != nil {
 			if atomic.CompareAndSwapUint32(&done, 0, 1) {
 				s.set({{$tuple.TupleType}}{}, err)
 			}
 		} else {
-			{{$j.ResVar}} = val
 			if atomic.AddInt32(&c, -1) == 0 {
 				s.set({{$tuple.TupleType}}{ {{- range $k := $tuple.TupleVals}}{{if $k.NotFirst}}, {{end}}{{$k.Name}}{{end}} }, nil)
 			}
 		}
+	}
+
+{{- range $j := .SubscribeBlocks}}
+	{{$j.Future}}.state.subscribe(func(val {{$j.Type}}, err error) {
+		{{$j.ResVar}} = val
+		cb(err)
 	})
 {{- end}}
 
