@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/jizhuozhi/go-future/executors"
 )
 
 func TestAsync(t *testing.T) {
@@ -39,6 +41,35 @@ func TestAsyncPanic(t *testing.T) {
 	val, err := f.Get()
 	assert.Equal(t, 0, val)
 	assert.ErrorIs(t, err, ErrPanic)
+}
+
+func TestCtxAsyncPanic(t *testing.T) {
+	f := CtxAsync(context.Background(), func(ctx context.Context) (int, error) {
+		panic("panic")
+	})
+	val, err := f.Get()
+	assert.Equal(t, 0, val)
+	assert.ErrorIs(t, err, ErrPanic)
+}
+
+func TestSetExecutor(t *testing.T) {
+	counter := 0
+	SetExecutor(executors.ExecutorFunc(func(f func()) {
+		counter++
+		go f()
+	}))
+
+	f := Async(func() (int, error) {
+		return 1, nil
+	})
+	val, err := f.Get()
+	assert.Equal(t, 1, val)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, 1, counter)
+
+	assert.Panics(t, func() {
+		SetExecutor(nil)
+	})
 }
 
 func TestLazy(t *testing.T) {
