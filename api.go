@@ -7,14 +7,37 @@ import (
 	"runtime/debug"
 	"sync/atomic"
 	"time"
+
+	"github.com/jizhuozhi/go-future/executors"
 )
+
+type Executor interface {
+	Submit(func())
+}
+
+var executor Executor = executors.GoExecutor{}
+
+func SetExecutor(e Executor) {
+	if e == nil {
+		panic("executor is nil")
+	}
+	executor = e
+}
 
 var ErrPanic = errors.New("async panic")
 var ErrTimeout = errors.New("future timeout")
 
 func Async[T any](f func() (T, error)) *Future[T] {
+	return Submit(executor, f)
+}
+
+func CtxAsync[T any](ctx context.Context, f func(ctx context.Context) (T, error)) *Future[T] {
+	return CtxSubmit(ctx, executor, f)
+}
+
+func Submit[T any](e Executor, f func() (T, error)) *Future[T] {
 	s := &state[T]{}
-	go func() {
+	e.Submit(func() {
 		var val T
 		var err error
 		defer func() {
@@ -24,13 +47,13 @@ func Async[T any](f func() (T, error)) *Future[T] {
 			s.set(val, err)
 		}()
 		val, err = f()
-	}()
+	})
 	return &Future[T]{state: s}
 }
 
-func CtxAsync[T any](ctx context.Context, f func(ctx context.Context) (T, error)) *Future[T] {
+func CtxSubmit[T any](ctx context.Context, e Executor, f func(ctx context.Context) (T, error)) *Future[T] {
 	s := &state[T]{}
-	go func() {
+	e.Submit(func() {
 		var val T
 		var err error
 		defer func() {
@@ -40,7 +63,7 @@ func CtxAsync[T any](ctx context.Context, f func(ctx context.Context) (T, error)
 			s.set(val, err)
 		}()
 		val, err = f(ctx)
-	}()
+	})
 	return &Future[T]{state: s}
 }
 
