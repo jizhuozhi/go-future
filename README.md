@@ -47,7 +47,7 @@ func main() {
 
 Create an asynchronous task and return a `Future` to get the result.
 
-### Example
+#### Example
 
 ```go
 package main
@@ -65,10 +65,9 @@ func main() {
 
 ### `Lazy`
 
-
 Create a lazy execution task and return a `Future` to get the result. The task will only be executed once, and the task will only be executed when `Get` is called for the first time.
 
-### Example
+#### Example
 
 ```go
 package main
@@ -86,10 +85,9 @@ func main() {
 
 ### `Then`
 
-
 In reality, asynchronous tasks have dependencies. When task B depends on task A, it can be concatenated through `Then`.
 
-### Example
+#### Example
 
 ```go
 package main
@@ -114,3 +112,118 @@ func main() {
 	println(val, err)
 }
 ```
+
+---
+
+## DAG Execution Engine (New!)
+
+Starting from v0.1.4, `go-future` introduces a powerful **DAG (Directed Acyclic Graph) execution engine**, consisting of:
+
+* `dagcore`: A minimal, lock-free parallel DAG scheduler
+* `dagfunc`: A high-level builder that constructs DAGs using Go function signatures with type-based dependency resolution
+
+This enables users to describe complex data flow graphs declaratively with automatic dependency wiring and parallel execution.
+
+### Use Case
+
+* AI model composition pipelines
+* Request processing graphs
+* Asynchronous task orchestration
+
+### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"reflect"
+
+	"github.com/jizhuozhi/go-future/dagfunc"
+)
+
+func main() {
+	b := dagfunc.New()
+
+	// Provide input type
+	_ = b.Provide("")
+
+	// Register a function that depends on input
+	_ = b.Use(func(ctx context.Context, s string) (int, error) {
+		return len(s), nil
+	})
+
+	// Compile and execute
+	prog, _ := b.Compile(map[reflect.Type]any{
+		reflect.TypeOf(""): "hello world",
+	})
+	outputs, _ := prog.Run(context.Background())
+
+	// Get output value by using zero-value of type as key
+	fmt.Println("result:", outputs[0]) // => 11
+}
+```
+
+### Avoid Type Conflicts with Type Aliases
+
+`dagfunc` uses Go types to wire dependencies. This means if you have two different inputs or outputs with the same type (e.g., multiple `string`s), you **must disambiguate** them using **type aliases**.
+
+#### Example
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"reflect"
+
+	"github.com/jizhuozhi/go-future/dagfunc"
+)
+
+// Define type aliases to distinguish values
+type UserID string
+type Greeting string
+
+func main() {
+	b := dagfunc.New()
+
+	// Register inputs with distinct types
+	_ = b.Provide(UserID(""))
+
+	// Step 1: Get greeting from user ID
+	_ = b.Use(func(ctx context.Context, uid UserID) (Greeting, error) {
+		return Greeting("hello, " + string(uid)), nil
+	})
+
+	// Step 2: Convert to string for output
+	_ = b.Use(func(ctx context.Context, g Greeting) (string, error) {
+		return string(g), nil
+	})
+
+	prog, _ := b.Compile(map[reflect.Type]any{
+		reflect.TypeOf(UserID("")): UserID("Alice"),
+	})
+	out, _ := prog.Run(context.Background())
+
+	// Step 3: Get output value by using zero-value of type as key 
+	fmt.Println(out[""]) // => hello, Alice
+}
+```
+
+By aliasing `string` to `UserID` and `Greeting`, we allow the builder to differentiate between them — enabling type-safe, unambiguous wiring.
+
+### Advanced
+
+You can also retrieve individual results using:
+
+```go
+res, err := prog.Get(UserID(""))
+```
+
+### Internal Architecture
+
+* `dagcore.DAG`: Defines static DAG structure and runtime scheduling semantics
+* `dagfunc.Builder`: Wraps `dagcore` and infers DAG wiring from function types
+* Each node is executed in parallel once dependencies are met, using `Future`
