@@ -28,6 +28,22 @@ func TestDAG_SimpleExecution(t *testing.T) {
 	assert.Equal(t, "ab", res["B"])
 }
 
+func TestDAG_DepFailed(t *testing.T) {
+	dag := NewDAG()
+	assert.NoError(t, dag.AddNode("A", nil, func(ctx context.Context, _ map[NodeID]any) (any, error) {
+		panic("not implemented")
+	}))
+	assert.NoError(t, dag.AddNode("B", []NodeID{"A"}, func(ctx context.Context, deps map[NodeID]any) (any, error) {
+		return deps["A"].(string) + "b", nil
+	}))
+
+	inst, err := dag.Instantiate(nil)
+	assert.NoError(t, err)
+
+	_, err = inst.Execute(context.Background())
+	assert.Error(t, err)
+}
+
 func TestDAG_NodeExisted(t *testing.T) {
 	dag := NewDAG()
 	assert.NoError(t, dag.AddNode("A", nil, func(ctx context.Context, _ map[NodeID]any) (any, error) {

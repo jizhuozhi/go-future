@@ -253,8 +253,9 @@ func (d *DAGInstance) Execute(ctx context.Context) (map[NodeID]any, error) {
 					schedule(child)
 				}
 			}
-			node.promise.Set(val, err)
 			return val, err
+		}).Subscribe(func(val any, err error) {
+			node.promise.Set(val, err)
 		})
 	}
 
