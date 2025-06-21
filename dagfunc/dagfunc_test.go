@@ -70,3 +70,35 @@ func TestDagFuncFlow(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, ResultD{Message: "Sum is \x0f"}, dVal2.(ResultD))
 }
+
+func TestDagFuncFlowError(t *testing.T) {
+	builder := New()
+	assert.NoError(t, builder.Provide(InputA{}))
+	assert.NoError(t, builder.Provide(InputB{}))
+	assert.NoError(t, builder.Use(func(ctx context.Context, a InputA, b InputB) (ResultC, error) {
+		return ResultC{}, errors.New("fault")
+	}))
+	prog, err := builder.Compile(InputA{}, InputB{})
+	assert.NoError(t, err)
+	ctx := context.Background()
+	_, err = prog.Run(ctx)
+	assert.Error(t, err)
+}
+
+func TestDAGFuncInvalidProvide(t *testing.T) {
+	builder := New()
+	assert.NoError(t, builder.Provide(InputA{}))
+	assert.Error(t, builder.Provide(InputA{}))
+}
+
+func TestDAGFuncInvalidUse(t *testing.T) {
+	builder := New()
+	assert.ErrorIs(t, ErrNotAFunction, builder.Use(InputA{}))
+	assert.NoError(t, builder.Provide(InputA{}))
+	assert.NoError(t, builder.Provide(InputB{}))
+	assert.NoError(t, builder.Use(fnC))
+	assert.ErrorIs(t, ErrFuncSignature, builder.Use(func() {}))
+	assert.ErrorIs(t, ErrFuncSignature, builder.Use(func() (int, error) { return 0, nil }))
+	assert.ErrorIs(t, ErrMissingDependency, errors.Unwrap(builder.Use(func(ctx context.Context, _ string) (int, error) { return 0, nil })))
+	assert.Error(t, builder.Use(fnC))
+}
