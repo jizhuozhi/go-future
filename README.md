@@ -160,7 +160,8 @@ func main() {
 	})
 	outputs, _ := prog.Run(context.Background())
 
-	fmt.Println("result:", outputs[reflect.TypeOf(0)]) // => 11
+	// Get output value by using zero-value of type as key
+	fmt.Println("result:", outputs[0]) // => 11
 }
 ```
 
@@ -206,7 +207,8 @@ func main() {
 	})
 	out, _ := prog.Run(context.Background())
 
-	fmt.Println(out[reflect.TypeOf("")]) // => hello, Alice
+	// Step 3: Get output value by using zero-value of type as key 
+	fmt.Println(out[""]) // => hello, Alice
 }
 ```
 
