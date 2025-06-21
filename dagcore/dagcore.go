@@ -255,7 +255,11 @@ func (d *DAGInstance) Execute(ctx context.Context) (map[NodeID]any, error) {
 			}
 			return val, err
 		}).Subscribe(func(val any, err error) {
-			node.promise.Set(val, err)
+			// Use SetSafety instead of Set here because:
+			// Only when future.AllOf(...).Get() returns an error (i.e., some node failed),
+			// there will be concurrent attempts to mark all unfinished nodes as failed,
+			// but only the first call will succeed in setting the result, avoiding panic
+			node.promise.SetSafety(val, err)
 		})
 	}
 
@@ -265,9 +269,14 @@ func (d *DAGInstance) Execute(ctx context.Context) (map[NodeID]any, error) {
 
 	_, err := future.AllOf(futures...).Get()
 	if err != nil {
-		// marking not executed nodes as specially error to avoid deadlock
 		for _, n := range d.nodes {
-			n.promise.SetSafety(nil, ErrDAGNodeNotExecuted)
+			if !n.future.Done() {
+				// Some node execution failed, defensively mark all unexecuted nodes with ErrDAGNodeNotExecuted.
+				// This prevents Get() from blocking forever due to missing results.
+				// Using SetSafety ensures concurrency safety here as Subscribe
+				// may try to set these promises simultaneously.
+				n.promise.SetSafety(nil, ErrDAGNodeNotExecuted)
+			}
 		}
 		return nil, err
 	}
