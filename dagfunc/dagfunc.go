@@ -46,8 +46,7 @@ func New() *Builder {
 // The type itself determines uniqueness; only one input per type is allowed.
 func (b *Builder) Provide(sample any) error {
 	t := reflect.TypeOf(sample)
-	id := dagcore.NodeID(fmt.Sprintf("I%d", b.counter))
-	b.counter++
+	id := dagcore.NodeID(fmt.Sprintf("input:%s", fullTypeName(t)))
 	if err := b.dag.AddInput(id); err != nil {
 		return err
 	}
@@ -74,8 +73,7 @@ func (b *Builder) Use(fn any) error {
 	}
 
 	retType := t.Out(0)
-	id := dagcore.NodeID(fmt.Sprintf("N%d", b.counter))
-	b.counter++
+	id := dagcore.NodeID(fmt.Sprintf("func:%s", fullTypeName(retType)))
 
 	var deps []dagcore.NodeID
 	for i := 1; i < t.NumIn(); i++ {
@@ -111,7 +109,7 @@ func (b *Builder) Use(fn any) error {
 }
 
 // Compile finalizes the DAG with concrete input values.
-// Each input must match the type of a previously provided sample.
+// Each input must match the type of previously provided sample.
 func (b *Builder) Compile(inputs ...any) (*Program, error) {
 	dagInputs := make(map[dagcore.NodeID]any, len(inputs))
 	for _, val := range inputs {
@@ -153,4 +151,11 @@ func (p *Program) Get(sample any) (any, error) {
 		return nil, ErrTypeNotFound
 	}
 	return p.execution.Nodes()[id].Future().Get()
+}
+
+func fullTypeName(t reflect.Type) string {
+	if t.PkgPath() == "" {
+		return t.String() // e.g., builtin types like int, string
+	}
+	return t.PkgPath() + "." + t.Name()
 }
