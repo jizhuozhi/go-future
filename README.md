@@ -155,9 +155,7 @@ func main() {
 	})
 
 	// Compile and execute
-	prog, _ := b.Compile(map[reflect.Type]any{
-		reflect.TypeOf(""): "hello world",
-	})
+	prog, _ := b.Compile([]any{"hello world"})
 	outputs, _ := prog.Run(context.Background())
 
 	// Get output value by using zero-value of type as key
@@ -177,7 +175,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"github.com/jizhuozhi/go-future/dagfunc"
 )
@@ -202,9 +199,7 @@ func main() {
 		return string(g), nil
 	})
 
-	prog, _ := b.Compile(map[reflect.Type]any{
-		reflect.TypeOf(UserID("")): UserID("Alice"),
-	})
+	prog, _ := b.Compile([]any{UserID("Alice")})
 	out, _ := prog.Run(context.Background())
 
 	// Step 3: Get output value by using zero-value of type as key 

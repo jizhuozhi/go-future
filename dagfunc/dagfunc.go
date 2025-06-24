@@ -110,7 +110,7 @@ func (b *Builder) Use(fn any) error {
 
 // Compile finalizes the DAG with concrete input values.
 // Each input must match the type of previously provided sample.
-func (b *Builder) Compile(inputs ...any) (*Program, error) {
+func (b *Builder) Compile(inputs []any) (*Program, error) {
 	dagInputs := make(map[dagcore.NodeID]any, len(inputs))
 	for _, val := range inputs {
 		typ := reflect.TypeOf(val)
