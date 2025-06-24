@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jizhuozhi/go-future"
 	"reflect"
 
 	"github.com/jizhuozhi/go-future/dagcore"
@@ -130,16 +131,24 @@ func (b *Builder) Compile(inputs []any) (*Program, error) {
 // Run executes the DAG and returns the results.
 // The results are keyed by a zero-value sample of their output type for ergonomic lookup.
 func (p *Program) Run(ctx context.Context) (map[any]any, error) {
-	res := make(map[any]any)
-	values, err := p.execution.Execute(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for id, val := range values {
-		typ := p.builder.idToType[id]
-		res[reflect.Zero(typ).Interface()] = val
-	}
-	return res, nil
+	return p.RunAsync(ctx).Get()
+}
+
+// RunAsync executes the DAG and returns the results.
+// The results are keyed by a zero-value sample of their output type for ergonomic lookup.
+func (p *Program) RunAsync(ctx context.Context) *future.Future[map[any]any] {
+	f := future.Then(p.execution.RunAsync(ctx), func(values map[dagcore.NodeID]any, err error) (map[any]any, error) {
+		res := make(map[any]any)
+		if err != nil {
+			return nil, err
+		}
+		for id, val := range values {
+			typ := p.builder.idToType[id]
+			res[reflect.Zero(typ).Interface()] = val
+		}
+		return res, nil
+	})
+	return f
 }
 
 // Get returns the output value of a node that produces the given sample's type.

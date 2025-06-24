@@ -203,8 +203,13 @@ type DAGInstance struct {
 	wrappers []NodeFuncWrapper
 }
 
-// Execute runs the DAG instance and returns the final values or error
-func (d *DAGInstance) Execute(ctx context.Context) (map[NodeID]any, error) {
+// Run runs the DAG instance and returns the final values or error
+func (d *DAGInstance) Run(ctx context.Context) (map[NodeID]any, error) {
+	return d.RunAsync(ctx).Get()
+}
+
+// RunAsync runs the DAG instance async and returns future of values
+func (d *DAGInstance) RunAsync(ctx context.Context) *future.Future[map[NodeID]any] {
 	result := make(map[NodeID]any)
 	resultMu := sync.Mutex{}
 	futures := make([]*future.Future[any], 0, len(d.nodes))
@@ -275,20 +280,29 @@ func (d *DAGInstance) Execute(ctx context.Context) (map[NodeID]any, error) {
 		schedule(id)
 	}
 
-	_, err := future.AllOf(futures...).Get()
-	if err != nil {
-		for _, n := range d.nodes {
-			if !n.future.Done() {
-				// Some node execution failed, defensively mark all unexecuted nodes with ErrDAGNodeNotExecuted.
-				// This prevents Get() from blocking forever due to missing results.
-				// Using SetSafety ensures concurrency safety here as Subscribe
-				// may try to set these promises simultaneously.
-				n.promise.SetSafety(nil, ErrDAGNodeNotExecuted)
+	f := future.Then(future.AllOf(futures...), func(_ []any, err error) (map[NodeID]any, error) {
+		if err != nil {
+			for _, n := range d.nodes {
+				if !n.future.Done() {
+					// Some node execution failed, defensively mark all unexecuted nodes with ErrDAGNodeNotExecuted.
+					// This prevents Get() from blocking forever due to missing results.
+					// Using SetSafety ensures concurrency safety here as Subscribe
+					// may try to set these promises simultaneously.
+					n.promise.SetSafety(nil, ErrDAGNodeNotExecuted)
+				}
 			}
+			return nil, err
 		}
-		return nil, err
-	}
-	return result, nil
+		res := make(map[NodeID]any, len(d.nodes))
+		resultMu.Lock()
+		for k, v := range result {
+			res[k] = v
+		}
+		resultMu.Unlock()
+		return result, nil
+	})
+
+	return f
 }
 
 func (d *DAGInstance) Spec() *DAG {

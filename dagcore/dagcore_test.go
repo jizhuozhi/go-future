@@ -22,7 +22,7 @@ func TestDAG_SimpleExecution(t *testing.T) {
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
 
-	res, err := inst.Execute(context.Background())
+	res, err := inst.Run(context.Background())
 	assert.NoError(t, err)
 	assert.Equal(t, "a", res["A"])
 	assert.Equal(t, "ab", res["B"])
@@ -40,7 +40,7 @@ func TestDAG_DepFailed(t *testing.T) {
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
 
-	_, err = inst.Execute(context.Background())
+	_, err = inst.Run(context.Background())
 	assert.Error(t, err)
 }
 
@@ -93,7 +93,7 @@ func TestDAG_ExecutionFailure(t *testing.T) {
 	})
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
-	_, err = inst.Execute(context.Background())
+	_, err = inst.Run(context.Background())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "fail")
 }
@@ -114,7 +114,7 @@ func TestDAG_ParallelExecution(t *testing.T) {
 	})
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
-	res, err := inst.Execute(context.Background())
+	res, err := inst.Run(context.Background())
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(res))
 	assert.Equal(t, int32(2), counter)
@@ -130,7 +130,7 @@ func TestDAG_NodeNotExecuted(t *testing.T) {
 	})
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
-	_, err = inst.Execute(context.Background())
+	_, err = inst.Run(context.Background())
 	assert.Error(t, err)
 
 	for _, node := range inst.Nodes() {
@@ -147,7 +147,7 @@ func TestDAG_NodeDuration(t *testing.T) {
 	})
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
-	_, err = inst.Execute(context.Background())
+	_, err = inst.Run(context.Background())
 	assert.NoError(t, err)
 	dur := inst.Nodes()["A"].Duration()
 	assert.GreaterOrEqual(t, dur.Milliseconds(), int64(15))
@@ -165,7 +165,7 @@ func TestDAG_ForwardReference(t *testing.T) {
 
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
-	res, err := inst.Execute(context.Background())
+	res, err := inst.Run(context.Background())
 	assert.NoError(t, err)
 	assert.Equal(t, "ab", res["B"])
 }
@@ -180,7 +180,7 @@ func TestDAG_Input(t *testing.T) {
 	})
 	inst, err := dag.Instantiate(map[NodeID]any{"A": "a"})
 	assert.NoError(t, err)
-	_, err = inst.Execute(context.Background())
+	_, err = inst.Run(context.Background())
 	assert.NoError(t, err)
 }
 

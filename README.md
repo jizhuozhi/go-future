@@ -315,9 +315,13 @@ Adds a computational node with declared dependencies.
 
 Creates a runtime instance of the DAG for execution.
 
-#### `(*DAGInstance).Execute(ctx context.Context) (map[NodeID]any, error)`
+#### `(*DAGInstance).Run(ctx context.Context) (map[NodeID]any, error)`
 
 Executes all nodes and returns the final results.
+
+#### `(*DAGInstance).RunAsync(ctx context.Context) *Future[map[NodeID]any]`
+
+Runs asynchronously and returns a future.
 
 ---
 
@@ -477,9 +481,13 @@ func(ctx context.Context, A, B, ...) (X, Y, ..., error)
 
 Builds a DAG using the provided inputs.
 
-#### `(*Program).Run(ctx context.Context) (map[reflect.Type]any, error)`
+#### `(*Program).Run(ctx context.Context) (map[any]any, error)`
 
-Executes the DAG. Outputs are keyed by result types.
+Executes the DAG. Outputs are keyed by result types with typed zero.
+
+#### `(*Program).RunAsync(ctx context.Context) *future.Future[map[any]any]`
+
+Executes the DAG. Return a future with outputs are keyed by result types with typed zero.
 
 #### `(*Program).Get(any) (any, error)`
 
