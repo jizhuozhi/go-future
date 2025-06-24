@@ -209,3 +209,50 @@ func TestDAG_InputDuplicated(t *testing.T) {
 	_, err := dag.Instantiate(map[NodeID]any{"A": "a"})
 	assert.ErrorIs(t, err, ErrDAGNodeNotInput)
 }
+
+func TestDAG_SimpleExecutionMermaid(t *testing.T) {
+	dag := NewDAG()
+
+	// Inputs
+	assert.NoError(t, dag.AddInput("inputA"))
+	assert.NoError(t, dag.AddInput("inputB"))
+
+	// Nodes
+	err := dag.AddNode("node1", []NodeID{"inputA"}, func(ctx context.Context, deps map[NodeID]any) (any, error) {
+		return "ok", nil
+	})
+	assert.NoError(t, err)
+
+	err = dag.AddNode("node2", []NodeID{"inputA", "inputB"}, func(ctx context.Context, deps map[NodeID]any) (any, error) {
+		return "ok", nil
+	})
+	assert.NoError(t, err)
+
+	err = dag.AddNode("node3", []NodeID{"node1", "node2"}, func(ctx context.Context, deps map[NodeID]any) (any, error) {
+		return "ok", nil
+	})
+	assert.NoError(t, err)
+
+	inst, err := dag.Instantiate(map[NodeID]any{
+		"inputA": nil,
+		"inputB": nil,
+	})
+	assert.NoError(t, err)
+
+	out := ToMermaid(inst)
+
+	expected := `graph LR
+	inputA["inputA"]
+	inputB["inputB"]
+	node1(("node1"))
+	node2(("node2"))
+	node3(("node3"))
+	inputA --> node1
+	inputA --> node2
+	inputB --> node2
+	node1 --> node3
+	node2 --> node3
+`
+
+	assert.Equal(t, expected, out)
+}

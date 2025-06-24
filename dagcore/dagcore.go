@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -190,6 +192,7 @@ type NodeInstance struct {
 
 func (n *NodeInstance) ID() NodeID                  { return n.spec.id }
 func (n *NodeInstance) Deps() []NodeID              { return n.spec.deps }
+func (n *NodeInstance) Input() bool                 { return n.spec.input }
 func (n *NodeInstance) Future() *future.Future[any] { return n.future }
 func (n *NodeInstance) Duration() time.Duration     { return n.duration }
 
@@ -219,6 +222,11 @@ func (d *DAGInstance) Execute(ctx context.Context) (map[NodeID]any, error) {
 		node := d.nodes[id]
 
 		if node.spec.input {
+			// input node never set error, ignore directly
+			val, _ := node.future.Get()
+			resultMu.Lock()
+			result[id] = val
+			resultMu.Unlock()
 			for _, child := range node.children {
 				if atomic.AddInt32(&d.nodes[child].pending, -1) == 0 {
 					schedule(child)
@@ -289,4 +297,32 @@ func (d *DAGInstance) Spec() *DAG {
 
 func (d *DAGInstance) Nodes() map[NodeID]*NodeInstance {
 	return d.nodes
+}
+
+// ToMermaid converts the DAG static topology to a Mermaid.js-compatible graph string.
+// This is an external utility function that reads the DAG structure for visualization.
+func ToMermaid(d *DAGInstance) string {
+	var b strings.Builder
+	b.WriteString("graph LR\n")
+	ids := make([]string, 0, len(d.nodes))
+	for id := range d.nodes {
+		ids = append(ids, string(id))
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		node := d.Nodes()[NodeID(id)]
+		label := id
+		if node.Input() {
+			b.WriteString(fmt.Sprintf("\t%s[%q]\n", label, label))
+		} else {
+			b.WriteString(fmt.Sprintf("\t%s((%q))\n", label, label))
+		}
+	}
+	for _, id := range ids {
+		node := d.Nodes()[NodeID(id)]
+		for _, dep := range node.Deps() {
+			b.WriteString(fmt.Sprintf("\t%s --> %s\n", string(dep), string(id)))
+		}
+	}
+	return b.String()
 }
