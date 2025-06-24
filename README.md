@@ -231,7 +231,7 @@ Benchmark/Channel           3.00M	    399 ns/op
 
 ---
 
-## 📦 DAG Execution Engine (Experimental)
+# 📦 DAG Execution Engine (Experimental)
 
 Starting from v0.1.4, `go-future` introduces a powerful **DAG (Directed Acyclic Graph) execution engine**, consisting of:
 
@@ -240,13 +240,161 @@ Starting from v0.1.4, `go-future` introduces a powerful **DAG (Directed Acyclic 
 
 This enables users to describe complex data flow graphs declaratively with automatic dependency wiring and parallel execution.
 
-### Use Case
+## dagcore
 
-* AI model composition pipelines
-* Request processing graphs
-* Asynchronous task orchestration
+`dagcore` is the low-level DAG execution engine powering [`go-future`](https://github.com/jizhuozhi/go-future)'s structured concurrency and dataflow execution model. It provides a lock-free, dependency-driven scheduler for executing static DAGs (Directed Acyclic Graphs) in parallel.
 
-### Example
+### ✨ Features
+
+* ⚡ **Lock-free execution** via atomic dependency counters
+* ⛓️ **Supports any static DAG with arbitrary fan-in/out structure**
+* 🔁 **Exactly-once execution**: each node runs exactly once after its dependencies complete
+* 🧠 **On-demand scheduling**: nodes are only triggered once all dependencies complete — goroutines are created only when the node is ready to run
+* ❌ **Fast failure support**: optional early cancellation on error (fail-fast mode)
+* ⏱️ **Context propagation**: full support for timeout and cancellation via `context.Context`
+* 🧩 **Composable foundation**: designed for embedding in higher-level DAG builders (e.g. `dagfunc`)
+* 📈 **Metrics & logging hooks**: supports per-node wrappers for observability (e.g. retry, timing, logging)
+
+---
+
+### 🚀 Example Usage
+
+```go
+dag := dagcore.NewDAG()
+
+// Define DAG structure
+_ = dag.AddInput("A")
+_ = dag.AddNode("B", []dagcore.NodeID{"A"}, func(ctx context.Context, deps map[dagcore.NodeID]any) (any, error) {
+    return deps["A"].(int) + 2, nil
+})
+_ = dag.AddNode("C", []dagcore.NodeID{"A"}, func(ctx context.Context, deps map[dagcore.NodeID]any) (any, error) {
+    return deps["A"].(int) * 3, nil
+})
+
+// Execute
+inst, _ := dag.Instantiate(map[dagcore.NodeID]any{"A": 10})
+res, _ := inst.Execute(context.Background())
+fmt.Println("B:", res["B"], "C:", res["C"])
+```
+
+---
+
+### 🧠 Execution Model
+
+Each node in the DAG:
+
+* Declares its dependencies via `AddNode(id, deps, func)`
+* Executes only once **after all its inputs are ready**
+* Will not allocate any goroutine until scheduled — **on-demand execution**
+* May run in parallel with other ready nodes
+* Propagates failures down dependent nodes (fail-fast)
+
+Internally:
+
+* Uses atomic counters to track pending dependencies per node
+* Uses `future.Future` to propagate results, cancellation, and errors
+* Can be fully composed and integrated with the rest of `go-future`
+
+---
+
+### ⚙️ API Overview
+
+#### `dagcore.NewDAG() *DAG`
+
+Creates a new empty DAG instance.
+
+#### `(*DAG).AddInput(id NodeID) error`
+
+Adds a node that must be externally provided during execution.
+
+#### `(*DAG).AddNode(id NodeID, deps []NodeID, fn NodeFunc) error`
+
+Adds a computational node with declared dependencies.
+
+#### `(*DAG).Instantiate(inputs map[NodeID]any, wrappers ...NodeFuncWrapper) (*DAGInstance, error)`
+
+Creates a runtime instance of the DAG for execution.
+
+#### `(*DAGInstance).Execute(ctx context.Context) (map[NodeID]any, error)`
+
+Executes all nodes and returns the final results.
+
+---
+
+### 🔧 Advanced Features
+
+#### NodeFunc Wrapping
+
+Use `NodeFuncWrapper` to wrap node logic for tracing, logging, retries, etc:
+
+```go
+dag.Instantiate(inputs, func(n *dagcore.NodeInstance, fn dagcore.NodeFunc) dagcore.NodeFunc {
+    return func(ctx context.Context, deps map[dagcore.NodeID]any) (any, error) {
+        start := time.Now()
+        out, err := fn(ctx, deps)
+        log.Printf("node %s took %s", n.ID(), time.Since(start))
+        return out, err
+    }
+})
+```
+
+#### Mermaid Graph Output
+
+Convert the DAG to a [Mermaid.js](https://mermaid-js.github.io/) compatible graph string:
+
+```go
+fmt.Println(dagcore.ToMermaid(instance))
+```
+
+---
+
+### 🧱 Designed for Composition
+
+`dagcore` is intended to be embedded in high-level tools:
+
+* [`dagfunc`](../dagfunc): type-safe DAG builder with Go function signature inference
+* Custom domain-specific orchestrators, AI pipelines, CI/CD workflows
+* Any static dependency graph evaluation with result propagation
+
+## dagfunc
+
+`dagfunc` is a high-level, type-safe DAG (Directed Acyclic Graph) builder built on top of [`dagcore`](../dagcore). It allows you to define and execute dependency graphs by simply wiring Go functions based on their parameter and return types.
+
+### 🚀 What It Solves
+
+`dagfunc` abstracts away manual DAG construction by:
+
+- Automatically inferring node dependencies from function signatures
+- Resolving dependency order at compile-time
+- Mapping types to results without needing manual wiring
+
+Ideal for:
+
+- AI agent pipelines
+- Asynchronous service orchestration
+- Task graph composition with clear dependency semantics
+
+---
+
+### ✅ Features
+
+- ✅ Type-based dependency inference
+- ✅ Fully integrated with `go-future` for parallel execution
+- ✅ Reusable functions with Go-style declarations
+- ✅ Built-in support for context propagation and error handling
+- ✅ Alias support to distinguish same-type dependencies
+
+---
+
+### 🔧 Installation
+
+```bash
+go get github.com/jizhuozhi/go-future/dagfunc
+````
+
+---
+
+### ✨ Example
 
 ```go
 package main
@@ -254,90 +402,121 @@ package main
 import (
 	"context"
 	"fmt"
-	"reflect"
-
 	"github.com/jizhuozhi/go-future/dagfunc"
 )
 
 func main() {
+	type Input string
+	type TokenCount int
+
 	b := dagfunc.New()
 
-	// Provide input type
-	_ = b.Provide("")
+	// Step 1: Declare input
+	_ = b.Provide(Input(""))
 
-	// Register a function that depends on input
-	_ = b.Use(func(ctx context.Context, s string) (int, error) {
-		return len(s), nil
+	// Step 2: Register function
+	_ = b.Use(func(ctx context.Context, text Input) (TokenCount, error) {
+		return TokenCount(len(text)), nil
 	})
 
-	// Compile and execute
-	prog, _ := b.Compile([]any{"hello world"})
-	outputs, _ := prog.Run(context.Background())
-
-	// Get output value by using zero-value of type as key
-	fmt.Println("result:", outputs[0]) // => 11
+	// Step 3: Run
+	prog, _ := b.Compile([]any{Input("hello world")})
+	out, _ := prog.Run(context.Background())
+	fmt.Println(out[TokenCount(0)]) // Output: 11
 }
 ```
 
-### Avoid Type Conflicts with Type Aliases
+---
 
-`dagfunc` uses Go types to wire dependencies. This means if you have two different inputs or outputs with the same type (e.g., multiple `string`s), you **must disambiguate** them using **type aliases**.
+### 🧠 Type-Based Wiring
 
-#### Example
+`dagfunc` determines node dependencies using **parameter types** and result types:
+
+* Each function must accept `context.Context` as the first argument
+* Inputs and outputs must use unique Go types or **aliases**
+* The DAG will automatically determine execution order
+
+> ⚠️ If two inputs/outputs are of the same type (e.g., multiple `string` values), use `type alias` to disambiguate.
+
+#### With type alias
 
 ```go
-package main
-
-import (
-	"context"
-	"fmt"
-
-	"github.com/jizhuozhi/go-future/dagfunc"
-)
-
-// Define type aliases to distinguish values
 type UserID string
 type Greeting string
 
-func main() {
-	b := dagfunc.New()
-
-	// Register inputs with distinct types
-	_ = b.Provide(UserID(""))
-
-	// Step 1: Get greeting from user ID
-	_ = b.Use(func(ctx context.Context, uid UserID) (Greeting, error) {
-		return Greeting("hello, " + string(uid)), nil
-	})
-
-	// Step 2: Convert to string for output
-	_ = b.Use(func(ctx context.Context, g Greeting) (string, error) {
-		return string(g), nil
-	})
-
-	prog, _ := b.Compile([]any{UserID("Alice")})
-	out, _ := prog.Run(context.Background())
-
-	// Step 3: Get output value by using zero-value of type as key 
-	fmt.Println(out[""]) // => hello, Alice
-}
+b.Provide(UserID(""))
+b.Use(func(ctx context.Context, uid UserID) (Greeting, error) {
+	return Greeting("Hello, " + string(uid)), nil
+})
+b.Use(func(ctx context.Context, g Greeting) (string, error) {
+	return string(g), nil
+})
 ```
 
-By aliasing `string` to `UserID` and `Greeting`, we allow the builder to differentiate between them — enabling type-safe, unambiguous wiring.
+---
 
-### Advanced
+### 🧰 API Overview
 
-You can also retrieve individual results using:
+#### `dagfunc.New() *Builder`
+
+Creates a new DAG builder.
+
+#### `(*Builder).Provide(val any) error`
+
+Declares a root node with known value.
+
+#### `(*Builder).Use(fn any) error`
+
+Registers a function as a DAG node. Must match:
 
 ```go
-res, err := prog.Get(UserID(""))
+func(ctx context.Context, A, B, ...) (X, Y, ..., error)
 ```
 
-### Internal Architecture
+#### `(*Builder).Compile(inputs []any) (*Program, error)`
 
-* `dagcore.DAG`: Defines static DAG structure and runtime scheduling semantics
-* `dagfunc.Builder`: Wraps `dagcore` and infers DAG wiring from function types
-* Each node is executed in parallel once dependencies are met, using `Future`
+Builds a DAG using the provided inputs.
+
+#### `(*Program).Run(ctx context.Context) (map[reflect.Type]any, error)`
+
+Executes the DAG. Outputs are keyed by result types.
+
+#### `(*Program).Get(any) (any, error)`
+
+Gets the result value for a specific type.
+
+#### Error propagation
+
+* DAG execution will **fail fast** by default
+* Downstream nodes will not be executed if inputs fail
+* You can customize error behavior using `dagcore`
+
+---
+
+### 🧩 Relationship to dagcore
+
+| Layer     | Role                                      |
+| --------- | ----------------------------------------- |
+| dagfunc   | High-level: Build DAGs from Go functions  |
+| dagcore   | Low-level: Execute DAGs with scheduling   |
+| go-future | Runtime: Power async execution via Future |
+
+---
+
+### 💡 Use Cases
+
+* LLM / Agent planning pipelines
+* Microservice DAG invocation
+* Declarative orchestration of business logic
+* Build systems / task runners
+
+---
+
+### 📌 Notes
+
+* Outputs are retrieved by Go types (typed zero), not labels
+* Type aliasing is required for disambiguation
+* All dependencies must be resolvable at compile-time
 
 ## 🔐 License
 
