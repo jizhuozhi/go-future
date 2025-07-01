@@ -18,8 +18,6 @@ const (
 	maskState   = 1<<34 - 1
 )
 
-const flagLazy uint64 = 1 << 63
-
 // Promise The Promise provides a facility to store a value or an error that is later acquired asynchronously via a Future
 // created by the Promise. Note that the Promise object is meant to be set only once.
 //
@@ -79,19 +77,6 @@ func (s *state[T]) set(val T, err error) bool {
 }
 
 func (s *state[T]) get() (T, error) {
-	if atomic.LoadUint64(&s.state)&flagLazy == flagLazy {
-		for {
-			st := atomic.LoadUint64(&s.state)
-			if st&flagLazy != flagLazy {
-				break
-			}
-			if atomic.CompareAndSwapUint64(&s.state, st, st&(^flagLazy)) {
-				val, err := s.f()
-				s.set(val, err)
-				return val, err
-			}
-		}
-	}
 	for {
 		st := atomic.LoadUint64(&s.state)
 		if isDone(st) {
