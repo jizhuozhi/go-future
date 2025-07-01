@@ -67,14 +67,6 @@ func CtxSubmit[T any](ctx context.Context, e Executor, f func(ctx context.Contex
 	return &Future[T]{state: s}
 }
 
-// Lazy Deprecated, will be removed in later version
-func Lazy[T any](f func() (T, error)) *Future[T] {
-	s := &state[T]{}
-	s.state |= flagLazy
-	s.f = f
-	return &Future[T]{state: s}
-}
-
 func Done[T any](val T) *Future[T] {
 	return Done2(val, nil)
 }
