@@ -19,6 +19,7 @@ func TestDAG_SimpleExecution(t *testing.T) {
 		return deps["A"].(string) + "b", nil
 	}))
 
+	assert.NoError(t, dag.Freeze())
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
 
@@ -37,6 +38,7 @@ func TestDAG_DepFailed(t *testing.T) {
 		return deps["A"].(string) + "b", nil
 	}))
 
+	assert.NoError(t, dag.Freeze())
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
 
@@ -67,8 +69,7 @@ func TestDAG_MissingDependency(t *testing.T) {
 	dag.AddNode("A", []NodeID{"Missing"}, func(ctx context.Context, _ map[NodeID]any) (any, error) {
 		return nil, nil
 	})
-	_, err := dag.Instantiate(nil)
-	assert.ErrorIs(t, err, ErrDAGIncomplete)
+	assert.ErrorIs(t, dag.Freeze(), ErrDAGIncomplete)
 }
 
 func TestDAG_Cyclic(t *testing.T) {
@@ -79,8 +80,7 @@ func TestDAG_Cyclic(t *testing.T) {
 	dag.AddNode("B", []NodeID{"A"}, func(ctx context.Context, _ map[NodeID]any) (any, error) {
 		return nil, nil
 	})
-	_, err := dag.Instantiate(nil)
-	assert.ErrorIs(t, err, ErrDAGCyclic)
+	assert.ErrorIs(t, dag.Freeze(), ErrDAGCyclic)
 }
 
 func TestDAG_ExecutionFailure(t *testing.T) {
@@ -91,6 +91,7 @@ func TestDAG_ExecutionFailure(t *testing.T) {
 	dag.AddNode("B", []NodeID{"A"}, func(ctx context.Context, deps map[NodeID]any) (any, error) {
 		return deps["A"], nil
 	})
+	assert.NoError(t, dag.Freeze())
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
 	_, err = inst.Run(context.Background())
@@ -112,6 +113,7 @@ func TestDAG_ParallelExecution(t *testing.T) {
 		atomic.AddInt32(&counter, 1)
 		return "b", nil
 	})
+	assert.NoError(t, dag.Freeze())
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
 	res, err := inst.Run(context.Background())
@@ -128,6 +130,7 @@ func TestDAG_NodeNotExecuted(t *testing.T) {
 	dag.AddNode("B", []NodeID{"A"}, func(ctx context.Context, deps map[NodeID]any) (any, error) {
 		return "b", nil
 	})
+	assert.NoError(t, dag.Freeze())
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
 	_, err = inst.Run(context.Background())
@@ -145,6 +148,7 @@ func TestDAG_NodeDuration(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 		return "ok", nil
 	})
+	assert.NoError(t, dag.Freeze())
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
 	_, err = inst.Run(context.Background())
@@ -163,6 +167,7 @@ func TestDAG_ForwardReference(t *testing.T) {
 		return "a", nil
 	}))
 
+	assert.NoError(t, dag.Freeze())
 	inst, err := dag.Instantiate(nil)
 	assert.NoError(t, err)
 	res, err := inst.Run(context.Background())
@@ -178,6 +183,7 @@ func TestDAG_Input(t *testing.T) {
 		assert.Equal(t, "a", deps["A"])
 		return "ok", nil
 	})
+	assert.NoError(t, dag.Freeze())
 	inst, err := dag.Instantiate(map[NodeID]any{"A": "a"})
 	assert.NoError(t, err)
 	_, err = inst.Run(context.Background())
@@ -192,6 +198,7 @@ func TestDAG_MissInput(t *testing.T) {
 		assert.Equal(t, "a", deps["A"])
 		return "ok", nil
 	})
+	assert.NoError(t, dag.Freeze())
 	_, err := dag.Instantiate(nil)
 	assert.ErrorIs(t, err, ErrDAGNodeNotRunnable)
 }
@@ -205,7 +212,7 @@ func TestDAG_InputDuplicated(t *testing.T) {
 	assert.NoError(t, dag.AddNode("A", nil, func(ctx context.Context, _ map[NodeID]any) (any, error) {
 		return "a", nil
 	}))
-
+	assert.NoError(t, dag.Freeze())
 	_, err := dag.Instantiate(map[NodeID]any{"A": "a"})
 	assert.ErrorIs(t, err, ErrDAGNodeNotInput)
 }
@@ -233,6 +240,7 @@ func TestDAG_SimpleExecutionMermaid(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
+	assert.NoError(t, dag.Freeze())
 	inst, err := dag.Instantiate(map[NodeID]any{
 		"inputA": nil,
 		"inputB": nil,
@@ -255,4 +263,18 @@ func TestDAG_SimpleExecutionMermaid(t *testing.T) {
 `
 
 	assert.Equal(t, expected, out)
+}
+
+func TestDAG_Freeze(t *testing.T) {
+	dag := NewDAG()
+	_, err := dag.Instantiate(nil)
+	assert.ErrorIs(t, err, ErrDAGNotFrozen)
+
+	assert.NoError(t, dag.Freeze())
+	assert.ErrorIs(t, dag.AddInput("inputA"), ErrDAGFrozen)
+	assert.ErrorIs(t, dag.AddNode("inputA", nil, func(ctx context.Context, deps map[NodeID]any) (any, error) {
+		return nil, nil
+	}), ErrDAGFrozen)
+	_, err = dag.Instantiate(nil)
+	assert.NoError(t, err)
 }

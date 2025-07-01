@@ -16,6 +16,8 @@ var (
 	ErrMissingDependency  = errors.New("dagfunc: missing dependency for parameter type")
 	ErrInputNotRegistered = errors.New("dagfunc: input type not registered")
 	ErrTypeNotFound       = errors.New("dagfunc: requested type not found in results")
+	ErrFrozen             = errors.New("dagfunc: frozen")
+	ErrNotFrozen          = errors.New("dagfunc: not frozen")
 )
 
 // Builder constructs a type-driven DAG using function signatures.
@@ -46,6 +48,10 @@ func New() *Builder {
 // Provide registers a sample value whose type will be used as an input node in the DAG.
 // The type itself determines uniqueness; only one input per type is allowed.
 func (b *Builder) Provide(sample any) error {
+	if b.dag.Frozen() {
+		return ErrFrozen
+	}
+
 	t := reflect.TypeOf(sample)
 	id := dagcore.NodeID(fmt.Sprintf("input:%s", fullTypeName(t)))
 	if err := b.dag.AddInput(id); err != nil {
@@ -60,6 +66,10 @@ func (b *Builder) Provide(sample any) error {
 // Function must have form: func(context.Context, A, B, ...) (R, error).
 // Dependencies are inferred from parameter types beyond the context.
 func (b *Builder) Use(fn any) error {
+	if b.dag.Frozen() {
+		return ErrFrozen
+	}
+
 	v := reflect.ValueOf(fn)
 	t := v.Type()
 
@@ -109,9 +119,22 @@ func (b *Builder) Use(fn any) error {
 	return nil
 }
 
+// Freeze finalizes the internal DAG structure and makes it immutable.
+//
+// After calling Freeze, the Builder's DAG topology is verified for completeness
+// and cycles, and becomes read-only. Provide and Use will return an error if
+// called after freezing. Compile requires the DAG to be frozen.
+func (b *Builder) Freeze() error {
+	return b.dag.Freeze()
+}
+
 // Compile finalizes the DAG with concrete input values.
 // Each input must match the type of previously provided sample.
 func (b *Builder) Compile(inputs []any) (*Program, error) {
+	if !b.dag.Frozen() {
+		return nil, ErrNotFrozen
+	}
+
 	dagInputs := make(map[dagcore.NodeID]any, len(inputs))
 	for _, val := range inputs {
 		typ := reflect.TypeOf(val)

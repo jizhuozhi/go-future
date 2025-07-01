@@ -45,6 +45,7 @@ func TestDagFuncFlow(t *testing.T) {
 	assert.NoError(t, builder.Use(fnC))
 	assert.NoError(t, builder.Use(fnD))
 
+	assert.NoError(t, builder.Freeze())
 	inst, err := builder.Compile([]any{InputA{Value: 10}, InputB{Text: "hello"}})
 	assert.NoError(t, err)
 
@@ -78,6 +79,7 @@ func TestDagFuncFlowError(t *testing.T) {
 	assert.NoError(t, builder.Use(func(ctx context.Context, a InputA, b InputB) (ResultC, error) {
 		return ResultC{}, errors.New("fault")
 	}))
+	assert.NoError(t, builder.Freeze())
 	prog, err := builder.Compile([]any{InputA{}, InputB{}})
 	assert.NoError(t, err)
 	ctx := context.Background()
