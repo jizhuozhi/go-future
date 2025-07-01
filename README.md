@@ -271,6 +271,12 @@ _ = dag.AddNode("C", []dagcore.NodeID{"A"}, func(ctx context.Context, deps map[d
     return deps["A"].(int) * 3, nil
 })
 
+// Verifies that the graph is complete and acyclic, 
+// then locks the structure to make it immutable for repeated safe instantiations.
+if err := dag.Freeze(); err != nil {
+	return err
+}
+
 // Execute
 inst, _ := dag.Instantiate(map[dagcore.NodeID]any{"A": 10})
 res, _ := inst.Execute(context.Background())
@@ -310,6 +316,18 @@ Adds a node that must be externally provided during execution.
 #### `(*DAG).AddNode(id NodeID, deps []NodeID, fn NodeFunc) error`
 
 Adds a computational node with declared dependencies.
+
+#### (*DAG).Freeze() error
+
+**Freezes the DAG topology.** Verifies that the graph is complete and acyclic, then locks the structure to make it immutable for repeated safe instantiations.
+
+```go
+dag := dagcore.NewDAG()
+// Add nodes...
+_ = dag.Freeze()
+```
+
+> You must call Freeze() before Instantiate or Run. Once frozen, the DAG can be instantiated and executed multiple times in parallel.
 
 #### `(*DAG).Instantiate(inputs map[NodeID]any, wrappers ...NodeFuncWrapper) (*DAGInstance, error)`
 
@@ -423,7 +441,13 @@ func main() {
 		return TokenCount(len(text)), nil
 	})
 
-	// Step 3: Run
+	// Step 3: Verifies that the graph is complete and acyclic, 
+	// then locks the structure to make it immutable for repeated safe instantiations.
+	if err := b.Freeze(); err != nil {
+		panic(err)
+    }
+	
+	// Step 4: Run
 	prog, _ := b.Compile([]any{Input("hello world")})
 	out, _ := prog.Run(context.Background())
 	fmt.Println(out[TokenCount(0)]) // Output: 11

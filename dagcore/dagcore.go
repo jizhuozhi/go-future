@@ -19,6 +19,8 @@ var (
 	ErrDAGNodeNotRunnable = errors.New("DAG node is not runnable")
 	ErrDAGNodeNotExecuted = errors.New("DAG node is not executed")
 
+	ErrDAGFrozen     = errors.New("DAG node is frozen")
+	ErrDAGNotFrozen  = errors.New("DAG node is not frozen")
 	ErrDAGIncomplete = errors.New("DAG is incomplete")
 	ErrDAGCyclic     = errors.New("DAG is cyclic")
 )
@@ -39,7 +41,8 @@ type NodeSpec struct {
 
 // DAG is the static structure definition holding node specs
 type DAG struct {
-	nodes map[NodeID]*NodeSpec
+	nodes  map[NodeID]*NodeSpec
+	frozen bool
 }
 
 // NodeFuncWrapper is used to wrap node execution logic (e.g. for logging, retry, metrics)
@@ -50,8 +53,14 @@ func NewDAG() *DAG {
 	return &DAG{nodes: make(map[NodeID]*NodeSpec)}
 }
 
-// AddInput adds an input node to the DAG, input value will be given in Instantiate
+// AddInput adds an input node to the DAG, input value will be given in Instantiate.
+//
+// Will return an error if the DAG is frozen.
 func (d *DAG) AddInput(id NodeID) error {
+	if d.frozen {
+		return ErrDAGFrozen
+	}
+
 	if _, exists := d.nodes[id]; exists {
 		return ErrDAGNodeExisted
 	}
@@ -62,8 +71,14 @@ func (d *DAG) AddInput(id NodeID) error {
 	return nil
 }
 
-// AddNode adds a new node to the DAG
+// AddNode adds a new node to the DAG.
+//
+// Will return an error if the DAG is frozen.
 func (d *DAG) AddNode(id NodeID, deps []NodeID, fn NodeFunc) error {
+	if d.frozen {
+		return ErrDAGFrozen
+	}
+
 	if _, exists := d.nodes[id]; exists {
 		return ErrDAGNodeExisted
 	}
@@ -76,6 +91,33 @@ func (d *DAG) AddNode(id NodeID, deps []NodeID, fn NodeFunc) error {
 		run:  fn,
 	}
 	return nil
+}
+
+// Freeze verifies that the DAG structure is complete and acyclic,
+// and marks the DAG as immutable for future instantiations.
+//
+// After calling Freeze successfully, the DAG topology becomes read-only.
+// Any attempt to modify the DAG (e.g., adding nodes) will return an error.
+// Instantiate will require the DAG to be frozen before execution.
+func (d *DAG) Freeze() error {
+	if d.frozen {
+		return ErrDAGFrozen
+	}
+	if err := d.checkComplete(); err != nil {
+		return err
+	}
+	if err := d.checkCycle(); err != nil {
+		return err
+	}
+	d.frozen = true
+	return nil
+}
+
+// Frozen returns true if the DAG has been frozen.
+//
+// A frozen DAG is immutable and safe for repeated instantiation and execution.
+func (d *DAG) Frozen() bool {
+	return d.frozen
 }
 
 // checkComplete verifies that all declared dependencies exist in the DAG
@@ -128,13 +170,17 @@ func (d *DAG) checkCycle() error {
 	return nil
 }
 
-// Instantiate builds a DAGInstance for execution with a given set of wrappers
+// Instantiate builds a DAGInstance for execution with the given input values
+// and optional NodeFunc wrappers.
+//
+// The DAG must be frozen before instantiation. If the DAG is not frozen,
+// Instantiate will return an error.
+//
+// Each instantiation produces an isolated runtime with its own promises,
+// allowing the same static DAG to be executed multiple times in parallel.
 func (d *DAG) Instantiate(inputs map[NodeID]any, wrappers ...NodeFuncWrapper) (*DAGInstance, error) {
-	if err := d.checkComplete(); err != nil {
-		return nil, err
-	}
-	if err := d.checkCycle(); err != nil {
-		return nil, err
+	if !d.frozen {
+		return nil, ErrDAGNotFrozen
 	}
 
 	nodes := make(map[NodeID]*NodeInstance)
