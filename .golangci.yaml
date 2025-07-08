@@ -16,6 +16,7 @@ linters:
 issues:
   exclude-rules:
     - path: _test\.go
+      text: ".*"
 
 linters-settings:
   revive:
