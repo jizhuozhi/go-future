@@ -184,7 +184,6 @@ type state[T any] struct {
 
 	val T
 	err error
-	f   func() (T, error)
 }
 
 type callback[T any] struct {

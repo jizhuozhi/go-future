@@ -27,7 +27,6 @@ type Builder struct {
 	dag      *dagcore.DAG
 	typeToID map[reflect.Type]dagcore.NodeID
 	idToType map[dagcore.NodeID]reflect.Type
-	counter  int
 }
 
 // Program represents an executable DAG instance with bound inputs.

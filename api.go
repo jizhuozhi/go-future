@@ -187,5 +187,5 @@ func Timeout[T any](f *Future[T], d time.Duration) *Future[T] {
 }
 
 func Until[T any](f *Future[T], t time.Time) *Future[T] {
-	return Timeout(f, t.Sub(time.Now()))
+	return Timeout(f, time.Until(t))
 }
