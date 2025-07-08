@@ -1,0 +1,21 @@
+run:
+  timeout: 5m
+  exclude:
+    - "_test\\.go"
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - unused
+    - ineffassign
+    - gosimple
+    - gofmt
+    - goimports
+    - deadcode
+
+linters-settings:
+  revive:
+    ignore-generated-header: true
+    severity: warning
