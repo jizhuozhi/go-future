@@ -27,6 +27,37 @@ func TestDAG_SimpleExecution(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "a", res["A"])
 	assert.Equal(t, "ab", res["B"])
+
+	assert.Equal(t, dag, inst.Spec())
+}
+
+func TestDAG_SimpleWrapExecution(t *testing.T) {
+	dag := NewDAG()
+	assert.NoError(t, dag.AddNode("A", nil, func(ctx context.Context, _ map[NodeID]any) (any, error) {
+		return "a", nil
+	}))
+	assert.NoError(t, dag.AddNode("B", []NodeID{"A"}, func(ctx context.Context, deps map[NodeID]any) (any, error) {
+		return deps["A"].(string) + "b", nil
+	}))
+
+	assert.NoError(t, dag.Freeze())
+	wraps := make(map[NodeID]struct{})
+	inst, err := dag.Instantiate(nil, func(n *NodeInstance, run NodeFunc) NodeFunc {
+		return func(ctx context.Context, deps map[NodeID]any) (any, error) {
+			wraps[n.ID()] = struct{}{}
+			return run(ctx, deps)
+		}
+	})
+	assert.NoError(t, err)
+
+	res, err := inst.Run(context.Background())
+	assert.NoError(t, err)
+	assert.Equal(t, "a", res["A"])
+	assert.Equal(t, "ab", res["B"])
+	assert.Equal(t, wraps, map[NodeID]struct{}{
+		"A": {},
+		"B": {},
+	})
 }
 
 func TestDAG_DepFailed(t *testing.T) {
@@ -54,6 +85,8 @@ func TestDAG_NodeExisted(t *testing.T) {
 	assert.ErrorIs(t, dag.AddNode("A", nil, func(ctx context.Context, _ map[NodeID]any) (any, error) {
 		return "a", nil
 	}), ErrDAGNodeExisted)
+	assert.NoError(t, dag.AddInput("B"))
+	assert.ErrorIs(t, dag.AddInput("B"), ErrDAGNodeExisted)
 }
 
 func TestDAG_NodeNotRunnable(t *testing.T) {
@@ -270,7 +303,10 @@ func TestDAG_Freeze(t *testing.T) {
 	_, err := dag.Instantiate(nil)
 	assert.ErrorIs(t, err, ErrDAGNotFrozen)
 
+	assert.False(t, dag.Frozen())
 	assert.NoError(t, dag.Freeze())
+	assert.ErrorIs(t, dag.Freeze(), ErrDAGFrozen)
+	assert.True(t, dag.Frozen())
 	assert.ErrorIs(t, dag.AddInput("inputA"), ErrDAGFrozen)
 	assert.ErrorIs(t, dag.AddNode("inputA", nil, func(ctx context.Context, deps map[NodeID]any) (any, error) {
 		return nil, nil

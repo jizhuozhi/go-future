@@ -21,6 +21,12 @@ jobs:
       with:
         go-version: '1.18'
 
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: v1.59.0   # 用最新的版本，具体可查 https://github.com/golangci/golangci-lint/releases
+        args: --timeout=5m
+
     - name: Test
       run: go test -race -coverprofile=coverage.out -covermode=atomic -v ./...
 

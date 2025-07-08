@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jizhuozhi/go-future"
 	"reflect"
 
+	"github.com/jizhuozhi/go-future"
 	"github.com/jizhuozhi/go-future/dagcore"
 )
 
@@ -27,7 +27,6 @@ type Builder struct {
 	dag      *dagcore.DAG
 	typeToID map[reflect.Type]dagcore.NodeID
 	idToType map[dagcore.NodeID]reflect.Type
-	counter  int
 }
 
 // Program represents an executable DAG instance with bound inputs.

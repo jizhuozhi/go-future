@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -256,8 +255,6 @@ func (d *DAGInstance) Run(ctx context.Context) (map[NodeID]any, error) {
 
 // RunAsync runs the DAG instance async and returns future of values
 func (d *DAGInstance) RunAsync(ctx context.Context) *future.Future[map[NodeID]any] {
-	result := make(map[NodeID]any)
-	resultMu := sync.Mutex{}
 	futures := make([]*future.Future[any], 0, len(d.nodes))
 
 	roots := make([]NodeID, 0, len(d.nodes))
@@ -268,62 +265,8 @@ func (d *DAGInstance) RunAsync(ctx context.Context) *future.Future[map[NodeID]an
 		futures = append(futures, node.future)
 	}
 
-	var schedule func(NodeID)
-	schedule = func(id NodeID) {
-		node := d.nodes[id]
-
-		if node.spec.input {
-			// input node never set error, ignore directly
-			val, _ := node.future.Get()
-			resultMu.Lock()
-			result[id] = val
-			resultMu.Unlock()
-			for _, child := range node.children {
-				if atomic.AddInt32(&d.nodes[child].pending, -1) == 0 {
-					schedule(child)
-				}
-			}
-			return
-		}
-
-		run := node.run
-		for i := len(d.wrappers) - 1; i >= 0; i-- {
-			run = d.wrappers[i](node, run)
-		}
-		node.start = time.Now()
-		future.CtxAsync(ctx, func(ctx context.Context) (any, error) {
-			deps := make(map[NodeID]any)
-			for _, depid := range node.spec.deps {
-				v, err := d.nodes[depid].future.Get()
-				if err != nil {
-					return nil, fmt.Errorf("dep %s failed: %w", depid, err)
-				}
-				deps[depid] = v
-			}
-			val, err := run(ctx, deps)
-			node.duration = time.Since(node.start)
-			if err == nil {
-				resultMu.Lock()
-				result[id] = val
-				resultMu.Unlock()
-			}
-			for _, child := range node.children {
-				if atomic.AddInt32(&d.nodes[child].pending, -1) == 0 {
-					schedule(child)
-				}
-			}
-			return val, err
-		}).Subscribe(func(val any, err error) {
-			// Use SetSafety instead of Set here because:
-			// Only when future.AllOf(...).Get() returns an error (i.e., some node failed),
-			// there will be concurrent attempts to mark all unfinished nodes as failed,
-			// but only the first call will succeed in setting the result, avoiding panic
-			node.promise.SetSafety(val, err)
-		})
-	}
-
 	for _, id := range roots {
-		schedule(id)
+		d.schedule(ctx, id)
 	}
 
 	f := future.Then(future.AllOf(futures...), func(_ []any, err error) (map[NodeID]any, error) {
@@ -339,16 +282,66 @@ func (d *DAGInstance) RunAsync(ctx context.Context) *future.Future[map[NodeID]an
 			}
 			return nil, err
 		}
-		res := make(map[NodeID]any, len(d.nodes))
-		resultMu.Lock()
-		for k, v := range result {
-			res[k] = v
+		results := make(map[NodeID]any)
+		for id, n := range d.nodes {
+			v, err := n.future.Get()
+			if err != nil {
+				// makes linter happy, but never touched...
+				return nil, err
+			}
+			results[id] = v
 		}
-		resultMu.Unlock()
-		return result, nil
+		return results, nil
 	})
 
 	return f
+}
+
+func (d *DAGInstance) schedule(ctx context.Context, id NodeID) {
+	node := d.nodes[id]
+
+	if node.spec.input {
+		for _, child := range node.children {
+			if atomic.AddInt32(&d.nodes[child].pending, -1) == 0 {
+				d.schedule(ctx, child)
+			}
+		}
+		return
+	}
+
+	run := node.run
+	for i := len(d.wrappers) - 1; i >= 0; i-- {
+		run = d.wrappers[i](node, run)
+	}
+	node.start = time.Now()
+	future.CtxAsync(ctx, func(ctx context.Context) (any, error) {
+		deps := make(map[NodeID]any)
+		for _, depid := range node.spec.deps {
+			v, err := d.nodes[depid].future.Get()
+			if err != nil {
+				// makes linter happy, but never touched...
+				return nil, fmt.Errorf("dep %s failed: %w", depid, err)
+			}
+			deps[depid] = v
+		}
+		val, err := run(ctx, deps)
+		node.duration = time.Since(node.start)
+		if err != nil {
+			return nil, err
+		}
+		for _, child := range node.children {
+			if atomic.AddInt32(&d.nodes[child].pending, -1) == 0 {
+				d.schedule(ctx, child)
+			}
+		}
+		return val, err
+	}).Subscribe(func(val any, err error) {
+		// Use SetSafety instead of Set here because:
+		// Only when future.AllOf(...).Get() returns an error (i.e., some node failed),
+		// there will be concurrent attempts to mark all unfinished nodes as failed,
+		// but only the first call will succeed in setting the result, avoiding panic
+		node.promise.SetSafety(val, err)
+	})
 }
 
 func (d *DAGInstance) Spec() *DAG {
