@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -36,6 +34,11 @@ type NodeSpec struct {
 	deps  []NodeID
 	run   NodeFunc
 	input bool
+
+	// subgraph if not nil, this node presents a subgraph
+	subgraph              *DAG
+	subgraphInputMapping  func(map[NodeID]any) map[NodeID]any
+	subgraphOutputMapping func(map[NodeID]any) any
 }
 
 // DAG is the static structure definition holding node specs
@@ -88,6 +91,25 @@ func (d *DAG) AddNode(id NodeID, deps []NodeID, fn NodeFunc) error {
 		id:   id,
 		deps: deps,
 		run:  fn,
+	}
+	return nil
+}
+
+func (d *DAG) AddSubgraph(id NodeID, deps []NodeID, subgraph *DAG, inputMapping func(map[NodeID]any) map[NodeID]any, outputMapping func(map[NodeID]any) any) error {
+	if d.frozen {
+		return ErrDAGFrozen
+	}
+	if _, exists := d.nodes[id]; exists {
+		return ErrDAGNodeExisted
+	}
+	d.nodes[id] = &NodeSpec{
+		id:   id,
+		deps: deps,
+		run:  nil, // delayed assignment at Instantiate time
+
+		subgraph:              subgraph,
+		subgraphInputMapping:  inputMapping,
+		subgraphOutputMapping: outputMapping,
 	}
 	return nil
 }
@@ -185,6 +207,11 @@ func (d *DAG) Instantiate(inputs map[NodeID]any, wrappers ...NodeFuncWrapper) (*
 	nodes := make(map[NodeID]*NodeInstance)
 	children := make(map[NodeID][]NodeID)
 	for id, spec := range d.nodes {
+		// `spec := spec` ensures that the closure inside this loop captures
+		// a unique copy of spec per iteration. Without this, all closures would
+		// share the same spec variable and cause incorrect behavior.
+		spec := spec
+
 		promise := future.NewPromise[any]()
 
 		val, ok := inputs[id]
@@ -198,13 +225,38 @@ func (d *DAG) Instantiate(inputs map[NodeID]any, wrappers ...NodeFuncWrapper) (*
 		if ok {
 			promise.Set(val, nil)
 		}
-		nodes[id] = &NodeInstance{
+
+		node := &NodeInstance{
 			spec:    spec,
 			run:     spec.run,
 			pending: int32(len(spec.deps)),
 			future:  promise.Future(),
 			promise: promise,
 		}
+
+		if spec.subgraph != nil {
+			node.run = func(ctx context.Context, deps map[NodeID]any) (any, error) {
+				subInputs := deps
+				if spec.subgraphInputMapping != nil {
+					subInputs = spec.subgraphInputMapping(deps)
+				}
+				subInstance, err := spec.subgraph.Instantiate(subInputs, wrappers...)
+				if err != nil {
+					return nil, err
+				}
+				node.subgraph = subInstance
+				res, err := subInstance.Run(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if spec.subgraphOutputMapping != nil {
+					return spec.subgraphOutputMapping(res), nil
+				}
+				return res, nil
+			}
+		}
+
+		nodes[id] = node
 		for _, dep := range spec.deps {
 			children[dep] = append(children[dep], id)
 		}
@@ -227,6 +279,8 @@ type NodeInstance struct {
 	children []NodeID
 	run      NodeFunc
 
+	subgraph *DAGInstance
+
 	pending  int32
 	future   *future.Future[any]
 	start    time.Time
@@ -238,6 +292,7 @@ type NodeInstance struct {
 func (n *NodeInstance) ID() NodeID                  { return n.spec.id }
 func (n *NodeInstance) Deps() []NodeID              { return n.spec.deps }
 func (n *NodeInstance) Input() bool                 { return n.spec.input }
+func (n *NodeInstance) Subgraph() *DAGInstance      { return n.subgraph }
 func (n *NodeInstance) Future() *future.Future[any] { return n.future }
 func (n *NodeInstance) Duration() time.Duration     { return n.duration }
 
@@ -350,32 +405,4 @@ func (d *DAGInstance) Spec() *DAG {
 
 func (d *DAGInstance) Nodes() map[NodeID]*NodeInstance {
 	return d.nodes
-}
-
-// ToMermaid converts the DAG static topology to a Mermaid.js-compatible graph string.
-// This is an external utility function that reads the DAG structure for visualization.
-func ToMermaid(d *DAGInstance) string {
-	var b strings.Builder
-	b.WriteString("graph LR\n")
-	ids := make([]string, 0, len(d.nodes))
-	for id := range d.nodes {
-		ids = append(ids, string(id))
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		node := d.Nodes()[NodeID(id)]
-		label := id
-		if node.Input() {
-			b.WriteString(fmt.Sprintf("\t%s[%q]\n", label, label))
-		} else {
-			b.WriteString(fmt.Sprintf("\t%s((%q))\n", label, label))
-		}
-	}
-	for _, id := range ids {
-		node := d.Nodes()[NodeID(id)]
-		for _, dep := range node.Deps() {
-			b.WriteString(fmt.Sprintf("\t%s --> %s\n", string(dep), string(id)))
-		}
-	}
-	return b.String()
 }
