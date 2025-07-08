@@ -1,7 +1,5 @@
 run:
   timeout: 5m
-  exclude:
-    - "_test\\.go"
 
 linters:
   enable:
@@ -14,6 +12,10 @@ linters:
     - gofmt
     - goimports
     - deadcode
+
+issues:
+  exclude-rules:
+    - path: _test\.go
 
 linters-settings:
   revive:
