@@ -40,8 +40,8 @@ type NodeSpec struct {
 	subgraphInputMapping  func(map[NodeID]any) map[NodeID]any
 	subgraphOutputMapping func(map[NodeID]any) any
 
-	skipFunc    func(deps map[NodeID]any) bool
-	defaultFunc func(deps map[NodeID]any) any
+	skipFunc    func(ctx context.Context, deps map[NodeID]any) bool
+	defaultFunc func(ctx context.Context, deps map[NodeID]any) any
 }
 
 type NodeOpt func(*NodeSpec)
@@ -394,10 +394,10 @@ func (d *DAGInstance) schedule(ctx context.Context, id NodeID) {
 			}
 			deps[depid] = v
 		}
-		if node.spec.skipFunc != nil && node.spec.skipFunc(deps) {
+		if node.spec.skipFunc != nil && node.spec.skipFunc(ctx, deps) {
 			node.skipped = true
 			if node.spec.defaultFunc != nil {
-				val = node.spec.defaultFunc(deps)
+				val = node.spec.defaultFunc(ctx, deps)
 			}
 		} else {
 			val, err = run(ctx, deps)
@@ -429,13 +429,13 @@ func (d *DAGInstance) Nodes() map[NodeID]*NodeInstance {
 	return d.nodes
 }
 
-func WithSkipFunc(fn func(deps map[NodeID]any) bool) NodeOpt {
+func WithSkipFunc(fn func(ctx context.Context, deps map[NodeID]any) bool) NodeOpt {
 	return func(n *NodeSpec) {
 		n.skipFunc = fn
 	}
 }
 
-func WithDefaultFunc(fn func(deps map[NodeID]any) any) NodeOpt {
+func WithDefaultFunc(fn func(ctx context.Context, deps map[NodeID]any) any) NodeOpt {
 	return func(n *NodeSpec) {
 		n.defaultFunc = fn
 	}
