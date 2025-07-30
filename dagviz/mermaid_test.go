@@ -9,7 +9,6 @@ import (
 )
 
 func TestDAG_ComplexNestedSubgraphs(t *testing.T) {
-	// === 子图 A: 层级型 ===
 	levelDAG := dagcore.NewDAG()
 	assert.NoError(t, levelDAG.AddInput("input1"))
 	assert.NoError(t, levelDAG.AddInput("input2"))
@@ -21,7 +20,6 @@ func TestDAG_ComplexNestedSubgraphs(t *testing.T) {
 	}))
 	assert.NoError(t, levelDAG.Freeze())
 
-	// === 子图 B: 并行校验型 ===
 	parallelChecks := dagcore.NewDAG()
 	assert.NoError(t, parallelChecks.AddInput("raw"))
 	assert.NoError(t, parallelChecks.AddNode("check1", []dagcore.NodeID{"raw"}, func(ctx context.Context, deps map[dagcore.NodeID]any) (any, error) {
@@ -89,23 +87,23 @@ func TestDAG_ComplexNestedSubgraphs(t *testing.T) {
 	out := ToMermaid(inst)
 
 	expected := `graph LR
-	A["A"]
-	B["B"]
+	A[/"A"/]
+	B[/"B"/]
 	subgraph levelSubgraph [Subgraph levelSubgraph]
-		levelSubgraph.child1(("levelSubgraph.child1"))
-		levelSubgraph.child2(("levelSubgraph.child2"))
-		levelSubgraph.input1["levelSubgraph.input1"]
-		levelSubgraph.input2["levelSubgraph.input2"]
+		levelSubgraph.child1["levelSubgraph.child1"]
+		levelSubgraph.child2["levelSubgraph.child2"]
+		levelSubgraph.input1[/"levelSubgraph.input1"/]
+		levelSubgraph.input2[/"levelSubgraph.input2"/]
 		levelSubgraph.input1 --> levelSubgraph.child1
 		levelSubgraph.child1 --> levelSubgraph.child2
 		levelSubgraph.input2 --> levelSubgraph.child2
 	end
-	merge(("merge"))
+	merge["merge"]
 	subgraph parallelChecks [Subgraph parallelChecks]
-		parallelChecks.check1(("parallelChecks.check1"))
-		parallelChecks.check2(("parallelChecks.check2"))
-		parallelChecks.check3(("parallelChecks.check3"))
-		parallelChecks.raw["parallelChecks.raw"]
+		parallelChecks.check1["parallelChecks.check1"]
+		parallelChecks.check2["parallelChecks.check2"]
+		parallelChecks.check3["parallelChecks.check3"]
+		parallelChecks.raw[/"parallelChecks.raw"/]
 		parallelChecks.raw --> parallelChecks.check1
 		parallelChecks.raw --> parallelChecks.check2
 		parallelChecks.raw --> parallelChecks.check3

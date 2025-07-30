@@ -19,6 +19,13 @@ func TestDAG_SimpleExecution(t *testing.T) {
 	assert.NoError(t, dag.AddNode("B", []NodeID{"A"}, func(ctx context.Context, deps map[NodeID]any) (any, error) {
 		return deps["A"].(string) + "b", nil
 	}))
+	assert.NoError(t, dag.AddNode("C", []NodeID{"B"}, func(ctx context.Context, deps map[NodeID]any) (any, error) {
+		return deps["B"].(string) + "c", nil
+	}, WithSkipFunc(func(deps map[NodeID]any) bool {
+		return deps["B"] != nil
+	}), WithDefaultFunc(func(deps map[NodeID]any) any {
+		return "default c"
+	})))
 
 	assert.NoError(t, dag.Freeze())
 	inst, err := dag.Instantiate(nil)
@@ -28,6 +35,7 @@ func TestDAG_SimpleExecution(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "a", res["A"])
 	assert.Equal(t, "ab", res["B"])
+	assert.Equal(t, "default c", res["C"])
 
 	assert.Equal(t, dag, inst.Spec())
 }
