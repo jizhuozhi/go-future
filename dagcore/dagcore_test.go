@@ -21,9 +21,9 @@ func TestDAG_SimpleExecution(t *testing.T) {
 	}))
 	assert.NoError(t, dag.AddNode("C", []NodeID{"B"}, func(ctx context.Context, deps map[NodeID]any) (any, error) {
 		return deps["B"].(string) + "c", nil
-	}, WithSkipFunc(func(deps map[NodeID]any) bool {
+	}, WithSkipFunc(func(ctx context.Context, deps map[NodeID]any) bool {
 		return deps["B"] != nil
-	}), WithDefaultFunc(func(deps map[NodeID]any) any {
+	}), WithDefaultFunc(func(ctx context.Context, deps map[NodeID]any) any {
 		return "default c"
 	})))
 
@@ -297,6 +297,11 @@ func TestDAG_SubgraphExecution(t *testing.T) {
 	}
 
 	assert.NoError(t, mainDAG.AddSubgraph("subnode", []NodeID{"input"}, sub, inputMapping, outputMapping))
+	assert.NoError(t, mainDAG.AddSubgraph("skippable", []NodeID{"input"}, sub, inputMapping, outputMapping, WithSkipFunc(func(ctx context.Context, deps map[NodeID]any) bool {
+		return deps["input"].(int) > 0
+	}), WithDefaultFunc(func(ctx context.Context, deps map[NodeID]any) any {
+		return -1
+	})))
 	assert.NoError(t, mainDAG.Freeze())
 
 	inst, err := mainDAG.Instantiate(map[NodeID]any{"input": 3})
@@ -306,6 +311,7 @@ func TestDAG_SubgraphExecution(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t, 6, res["subnode"])
+	assert.Equal(t, -1, res["skippable"])
 }
 
 func TestDAG_ComplexNestedSubgraphs(t *testing.T) {
@@ -339,30 +345,26 @@ func TestDAG_ComplexNestedSubgraphs(t *testing.T) {
 	assert.NoError(t, d.AddInput("A"))
 	assert.NoError(t, d.AddInput("B"))
 
-	assert.NoError(t, d.AddSubgraph("levelSubgraph", []NodeID{"A", "B"}, levelDAG,
-		func(deps map[NodeID]any) map[NodeID]any {
-			return map[NodeID]any{
-				"input1": deps["A"],
-				"input2": deps["B"],
-			}
-		},
-		func(results map[NodeID]any) any {
-			return results["child2"]
-		}))
+	assert.NoError(t, d.AddSubgraph("levelSubgraph", []NodeID{"A", "B"}, levelDAG, func(deps map[NodeID]any) map[NodeID]any {
+		return map[NodeID]any{
+			"input1": deps["A"],
+			"input2": deps["B"],
+		}
+	}, func(results map[NodeID]any) any {
+		return results["child2"]
+	}))
 
-	assert.NoError(t, d.AddSubgraph("parallelChecks", []NodeID{"A"}, parallelChecks,
-		func(deps map[NodeID]any) map[NodeID]any {
-			return map[NodeID]any{
-				"raw": deps["A"],
-			}
-		},
-		func(results map[NodeID]any) any {
-			return []any{
-				results["check1"],
-				results["check2"],
-				results["check3"],
-			}
-		}))
+	assert.NoError(t, d.AddSubgraph("parallelChecks", []NodeID{"A"}, parallelChecks, func(deps map[NodeID]any) map[NodeID]any {
+		return map[NodeID]any{
+			"raw": deps["A"],
+		}
+	}, func(results map[NodeID]any) any {
+		return []any{
+			results["check1"],
+			results["check2"],
+			results["check3"],
+		}
+	}))
 
 	assert.NoError(t, d.AddNode("merge", []NodeID{"levelSubgraph", "parallelChecks"}, func(ctx context.Context, deps map[NodeID]any) (any, error) {
 		return fmt.Sprintf("level=%v, checks=%v", deps["levelSubgraph"], deps["parallelChecks"]), nil

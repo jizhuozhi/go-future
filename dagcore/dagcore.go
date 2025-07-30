@@ -106,14 +106,14 @@ func (d *DAG) AddNode(id NodeID, deps []NodeID, fn NodeFunc, opts ...NodeOpt) er
 	return nil
 }
 
-func (d *DAG) AddSubgraph(id NodeID, deps []NodeID, subgraph *DAG, inputMapping func(map[NodeID]any) map[NodeID]any, outputMapping func(map[NodeID]any) any) error {
+func (d *DAG) AddSubgraph(id NodeID, deps []NodeID, subgraph *DAG, inputMapping func(map[NodeID]any) map[NodeID]any, outputMapping func(map[NodeID]any) any, opts ...NodeOpt) error {
 	if d.frozen {
 		return ErrDAGFrozen
 	}
 	if _, exists := d.nodes[id]; exists {
 		return ErrDAGNodeExisted
 	}
-	d.nodes[id] = &NodeSpec{
+	n := &NodeSpec{
 		id:   id,
 		deps: deps,
 		run:  nil, // delayed assignment at Instantiate time
@@ -122,6 +122,12 @@ func (d *DAG) AddSubgraph(id NodeID, deps []NodeID, subgraph *DAG, inputMapping 
 		subgraphInputMapping:  inputMapping,
 		subgraphOutputMapping: outputMapping,
 	}
+
+	for _, opt := range opts {
+		opt(n)
+	}
+
+	d.nodes[id] = n
 	return nil
 }
 
