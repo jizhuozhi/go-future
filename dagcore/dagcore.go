@@ -39,7 +39,12 @@ type NodeSpec struct {
 	subgraph              *DAG
 	subgraphInputMapping  func(map[NodeID]any) map[NodeID]any
 	subgraphOutputMapping func(map[NodeID]any) any
+
+	skipFunc    func(deps map[NodeID]any) bool
+	defaultFunc func(deps map[NodeID]any) any
 }
+
+type NodeOpt func(*NodeSpec)
 
 // DAG is the static structure definition holding node specs
 type DAG struct {
@@ -76,7 +81,7 @@ func (d *DAG) AddInput(id NodeID) error {
 // AddNode adds a new node to the DAG.
 //
 // Will return an error if the DAG is frozen.
-func (d *DAG) AddNode(id NodeID, deps []NodeID, fn NodeFunc) error {
+func (d *DAG) AddNode(id NodeID, deps []NodeID, fn NodeFunc, opts ...NodeOpt) error {
 	if d.frozen {
 		return ErrDAGFrozen
 	}
@@ -87,11 +92,17 @@ func (d *DAG) AddNode(id NodeID, deps []NodeID, fn NodeFunc) error {
 	if fn == nil {
 		return ErrDAGNodeNotRunnable
 	}
-	d.nodes[id] = &NodeSpec{
+	n := &NodeSpec{
 		id:   id,
 		deps: deps,
 		run:  fn,
 	}
+
+	for _, opt := range opts {
+		opt(n)
+	}
+
+	d.nodes[id] = n
 	return nil
 }
 
@@ -285,6 +296,7 @@ type NodeInstance struct {
 	future   *future.Future[any]
 	start    time.Time
 	duration time.Duration
+	skipped  bool
 
 	promise *future.Promise[any]
 }
@@ -295,6 +307,7 @@ func (n *NodeInstance) Input() bool                 { return n.spec.input }
 func (n *NodeInstance) Subgraph() *DAGInstance      { return n.subgraph }
 func (n *NodeInstance) Future() *future.Future[any] { return n.future }
 func (n *NodeInstance) Duration() time.Duration     { return n.duration }
+func (n *NodeInstance) Skipped() bool               { return n.skipped }
 
 // DAGInstance is the per-execution runtime of a DAG
 type DAGInstance struct {
@@ -370,6 +383,8 @@ func (d *DAGInstance) schedule(ctx context.Context, id NodeID) {
 	}
 	node.start = time.Now()
 	future.CtxAsync(ctx, func(ctx context.Context) (any, error) {
+		var val any
+		var err error
 		deps := make(map[NodeID]any)
 		for _, depid := range node.spec.deps {
 			v, err := d.nodes[depid].future.Get()
@@ -379,7 +394,14 @@ func (d *DAGInstance) schedule(ctx context.Context, id NodeID) {
 			}
 			deps[depid] = v
 		}
-		val, err := run(ctx, deps)
+		if node.spec.skipFunc != nil && node.spec.skipFunc(deps) {
+			node.skipped = true
+			if node.spec.defaultFunc != nil {
+				val = node.spec.defaultFunc(deps)
+			}
+		} else {
+			val, err = run(ctx, deps)
+		}
 		node.duration = time.Since(node.start)
 		if err != nil {
 			return nil, err
@@ -405,4 +427,16 @@ func (d *DAGInstance) Spec() *DAG {
 
 func (d *DAGInstance) Nodes() map[NodeID]*NodeInstance {
 	return d.nodes
+}
+
+func WithSkipFunc(fn func(deps map[NodeID]any) bool) NodeOpt {
+	return func(n *NodeSpec) {
+		n.skipFunc = fn
+	}
+}
+
+func WithDefaultFunc(fn func(deps map[NodeID]any) any) NodeOpt {
+	return func(n *NodeSpec) {
+		n.defaultFunc = fn
+	}
 }
