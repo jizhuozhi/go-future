@@ -27,6 +27,41 @@ func SetExecutor(e Executor) {
 var ErrPanic = errors.New("async panic")
 var ErrTimeout = errors.New("future timeout")
 
+type Result[T any] struct {
+	Val T
+	Err error
+}
+
+type AnyResult[T any] struct {
+	Index int
+	Val   T
+	Err   error
+}
+
+// ToChan converts a Future[T] into a single read-only channel of Result[T].
+//
+// When the Future completes, a Result[T] containing both the value and error
+// is sent through the channel, which is then closed. The channel is buffered
+// (size 1) to avoid blocking if the callback fires synchronously.
+//
+// Example:
+//
+//	resCh := ToChan(f)
+//	res := <-resCh
+//	if res.Err != nil {
+//	    fmt.Println("error:", res.Err)
+//	    return
+//	}
+//	fmt.Println("value:", res.Val)
+func ToChan[T any](f *Future[T]) <-chan Result[T] {
+	ch := make(chan Result[T], 1)
+	f.Subscribe(func(val T, err error) {
+		ch <- Result[T]{Val: val, Err: err}
+		close(ch)
+	})
+	return ch
+}
+
 func Async[T any](f func() (T, error)) *Future[T] {
 	return Submit(executor, f)
 }
@@ -98,12 +133,6 @@ func ThenAsync[T any, R any](f *Future[T], cb func(T, error) *Future[R]) *Future
 		})
 	})
 	return &Future[R]{state: s}
-}
-
-type AnyResult[T any] struct {
-	Index int
-	Val   T
-	Err   error
 }
 
 func AnyOf[T any](fs ...*Future[T]) *Future[AnyResult[T]] {

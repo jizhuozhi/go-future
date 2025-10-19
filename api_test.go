@@ -14,6 +14,16 @@ import (
 	"github.com/jizhuozhi/go-future/executors"
 )
 
+func TestToChan(t *testing.T) {
+	f := Async(func() (int, error) {
+		return 1, errFoo
+	})
+	ch := ToChan(f)
+	result := <-ch
+	assert.Equal(t, result.Val, 1)
+	assert.Equal(t, result.Err, errFoo)
+}
+
 func TestAsync(t *testing.T) {
 	f := Async(func() (int, error) {
 		return 1, nil
