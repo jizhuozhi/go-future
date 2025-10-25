@@ -7,22 +7,7 @@ import (
 	"runtime/debug"
 	"sync/atomic"
 	"time"
-
-	"github.com/jizhuozhi/go-future/executors"
 )
-
-type Executor interface {
-	Submit(func())
-}
-
-var executor Executor = executors.GoExecutor{}
-
-func SetExecutor(e Executor) {
-	if e == nil {
-		panic("executor is nil")
-	}
-	executor = e
-}
 
 var ErrPanic = errors.New("async panic")
 var ErrTimeout = errors.New("future timeout")
