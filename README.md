@@ -6,7 +6,6 @@
 **go-future** is a lightweight, high-performance, lock-free Future/Promise implementation for Go, built with modern concurrency in mind. It supports:
 
 - Asynchronous task execution (`Async`, `CtxAsync`)
-- ~~Lazy evaluation (`Lazy`)~~(Deprecated, will be removed in later version)
 - Promise resolution (`Promise`)
 - Event-driven callback registration (`Subscribe`)
 - Functional chaining (`Then`, `ThenAsync`)
@@ -67,32 +66,6 @@ f := future.Async(func() (string, error) {
 })
 val, err := f.Get()
 ```
-
----
-
-### `Lazy(func() (T, error)) *Future[T]`
-
-Returns a future that is lazily evaluated. The function is only executed once on the first call to `.Get()`.
-
-```go
-f := future.Lazy(func() (string, error) {
-	fmt.Println("evaluated")
-	return "lazy", nil
-})
-val, _ := f.Get() // prints "evaluated"
-```
-
-#### ⚠️ Deprecation Notice: Lazy
-The Lazy API is deprecated and will be removed in future versions.
-
-Although Lazy provides deferred execution semantics, it introduces implicit pull-based dependencies that are difficult to reason about in practice. Unlike Async, where execution is guaranteed upon construction, Lazy defers execution until .Get() is called — often far away from the site of definition.
-
-This subtle semantic difference:
-- Makes control flow harder to predict
-- Breaks intuitive data dependency modeling
-- Can result in unexpected bugs when chained or composed in concurrent settings
-
-Recommendation: Prefer using Async or Promise for all use cases. These are explicit and deterministic.
 
 ---
 
