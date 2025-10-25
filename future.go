@@ -35,7 +35,7 @@ type Promise[T any] struct {
 
 // Future The Future provides a mechanism to access the result of asynchronous operations:
 //
-// 1. An asynchronous operation (Async, Lazy or Promise) can provide a Future to the creator of that asynchronous operation.
+// 1. An asynchronous operation (Async and Promise) can provide a Future to the creator of that asynchronous operation.
 //
 // 2. The creator of the asynchronous operation can then use a variety of methods to query, wait for, or extract a value from the Future.
 // These methods may block if the asynchronous operation has not yet provided a value.
