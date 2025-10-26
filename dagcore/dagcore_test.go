@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var errFoo = errors.New("foo")
+
 func TestDAG_SimpleExecution(t *testing.T) {
 	dag := NewDAG()
 	assert.NoError(t, dag.AddNode("A", nil, func(ctx context.Context, _ map[NodeID]any) (any, error) {
@@ -26,6 +28,11 @@ func TestDAG_SimpleExecution(t *testing.T) {
 	}), WithDefaultFunc(func(ctx context.Context, deps map[NodeID]any) any {
 		return "default c"
 	})))
+	assert.NoError(t, dag.AddNode("D", nil, func(ctx context.Context, deps map[NodeID]any) (any, error) {
+		return nil, errFoo
+	}, WithDefaultFunc(func(ctx context.Context, deps map[NodeID]any) any {
+		return "default d"
+	})))
 
 	assert.NoError(t, dag.Freeze())
 	inst, err := dag.Instantiate(nil)
@@ -36,6 +43,9 @@ func TestDAG_SimpleExecution(t *testing.T) {
 	assert.Equal(t, "a", res["A"])
 	assert.Equal(t, "ab", res["B"])
 	assert.Equal(t, "default c", res["C"])
+	assert.Equal(t, "default d", res["D"])
+
+	assert.ErrorIs(t, inst.nodes[("D")].err, errFoo)
 
 	assert.Equal(t, dag, inst.Spec())
 }
@@ -315,7 +325,6 @@ func TestDAG_SubgraphExecution(t *testing.T) {
 }
 
 func TestDAG_ComplexNestedSubgraphs(t *testing.T) {
-	// === 子图 A: 层级型 ===
 	levelDAG := NewDAG()
 	assert.NoError(t, levelDAG.AddInput("input1"))
 	assert.NoError(t, levelDAG.AddInput("input2"))
@@ -327,7 +336,6 @@ func TestDAG_ComplexNestedSubgraphs(t *testing.T) {
 	}))
 	assert.NoError(t, levelDAG.Freeze())
 
-	// === 子图 B: 并行校验型 ===
 	parallelChecks := NewDAG()
 	assert.NoError(t, parallelChecks.AddInput("raw"))
 	assert.NoError(t, parallelChecks.AddNode("check1", []NodeID{"raw"}, func(ctx context.Context, deps map[NodeID]any) (any, error) {
