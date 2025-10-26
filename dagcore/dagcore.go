@@ -303,6 +303,7 @@ type NodeInstance struct {
 	start    time.Time
 	duration time.Duration
 	skipped  bool
+	err      error
 
 	promise *future.Promise[any]
 }
@@ -407,6 +408,12 @@ func (d *DAGInstance) schedule(ctx context.Context, id NodeID) {
 			}
 		} else {
 			val, err = run(ctx, deps)
+			if err != nil {
+				node.err = err
+				if node.spec.defaultFunc != nil {
+					val, err = node.spec.defaultFunc(ctx, deps), nil
+				}
+			}
 		}
 		node.duration = time.Since(node.start)
 		if err != nil {
