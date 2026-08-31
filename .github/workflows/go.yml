@@ -17,14 +17,17 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v6
       with:
-        go-version: '1.18'
+        go-version: '1.27'
 
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v9.3.0
       with:
-        version: v1.59.0   # 用最新的版本，具体可查 https://github.com/golangci/golangci-lint/releases
+        # golangci-lint only supports Go versions lower than or equal to the one
+        # it was built with, so this must be a release built with go1.27 or newer.
+        # See https://github.com/golangci/golangci-lint/issues/6643
+        version: v2.13.2
         args: --timeout=5m
 
     - name: Test

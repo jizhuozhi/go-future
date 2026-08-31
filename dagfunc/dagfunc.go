@@ -159,7 +159,7 @@ func (p *Program) Run(ctx context.Context) (map[any]any, error) {
 // RunAsync executes the DAG and returns the results.
 // The results are keyed by a zero-value sample of their output type for ergonomic lookup.
 func (p *Program) RunAsync(ctx context.Context) *future.Future[map[any]any] {
-	f := future.Then(p.execution.RunAsync(ctx), func(values map[dagcore.NodeID]any, err error) (map[any]any, error) {
+	f := p.execution.RunAsync(ctx).Then(func(values map[dagcore.NodeID]any, err error) (map[any]any, error) {
 		res := make(map[any]any)
 		if err != nil {
 			return nil, err
@@ -175,6 +175,8 @@ func (p *Program) RunAsync(ctx context.Context) *future.Future[map[any]any] {
 
 // Get returns the output value of a node that produces the given sample's type.
 // The sample is only used to determine the type.
+//
+// Prefer Value[T], which is type safe and needs no sample value.
 func (p *Program) Get(sample any) (any, error) {
 	typ := reflect.TypeOf(sample)
 	id, ok := p.builder.typeToID[typ]
@@ -182,6 +184,40 @@ func (p *Program) Get(sample any) (any, error) {
 		return nil, ErrTypeNotFound
 	}
 	return p.execution.Nodes()[id].Future().Get()
+}
+
+// ValueAsync returns the output of the node producing T as a Future, without
+// blocking. The returned Future is resolved when that node completes, so it has
+// to be triggered by Run or RunAsync first.
+//
+// Thanks to generic methods (Go 1.27) the result type is expressed as a method
+// type parameter, which removes both the throw-away sample value and the type
+// assertion needed by Get:
+//
+//	go prog.Run(ctx)
+//	c, err := prog.ValueAsync[ResultC]().Get()
+//
+// If no node produces T the Future fails immediately with ErrTypeNotFound; if
+// the produced value is not assignable to T it fails with future.ErrTypeMismatch.
+func (p *Program) ValueAsync[T any]() *future.Future[T] {
+	var zero T
+	typ := reflect.TypeFor[T]()
+	id, ok := p.builder.typeToID[typ]
+	if !ok {
+		return future.Done2(zero, fmt.Errorf("%w: %v", ErrTypeNotFound, typ))
+	}
+	return p.execution.Nodes()[id].Cast[T]()
+}
+
+// Value returns the output of the node producing T, blocking until that node
+// completes.
+//
+// The program must have been started with Run or RunAsync, otherwise Value
+// blocks forever.
+//
+//	c, err := prog.Value[ResultC]()
+func (p *Program) Value[T any]() (T, error) {
+	return p.ValueAsync[T]().Get()
 }
 
 func fullTypeName(t reflect.Type) string {

@@ -1,3 +1,10 @@
+// The tests in this file cover the deprecated package-level single-Future
+// transforms (Then, ThenAsync, ToAny, ToChan, Timeout, Until, Await).
+//
+// They exist to guarantee source compatibility for existing callers; the
+// behaviour itself is specified by the method form in method_test.go, which is
+// now the only implementation.
+
 package future
 
 import (

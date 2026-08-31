@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 5m
 
@@ -8,16 +10,12 @@ linters:
     - errcheck
     - unused
     - ineffassign
-    - gosimple
+  exclusions:
+    rules:
+      - path: _test\.go
+        text: ".*"
+
+formatters:
+  enable:
     - gofmt
     - goimports
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      text: ".*"
-
-linters-settings:
-  revive:
-    ignore-generated-header: true
-    severity: warning
