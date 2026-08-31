@@ -1,35 +1,35 @@
-package future
+package tuples
 
 import (
 	"errors"
 	"testing"
 
+	"github.com/jizhuozhi/go-future"
 	"github.com/stretchr/testify/assert"
 )
-
 {{range .TestCases }}
 func {{.Name}}(t *testing.T) {
     {{- $futures := .Futures}}
     {{- range $futures }}
-	var {{.Name}} *Future[{{.Type}}]
+	var {{.Name}} *future.Future[{{.Type}}]
 	{{- end}}
 
-	var ff *Future[Tuple{{len $futures}}[{{range $i := $futures}}{{if .NotFirst}}, {{end}}{{.Type}}{{end}}]]
+	var ff *future.Future[Tuple{{len $futures}}[{{range $i := $futures}}{{if .NotFirst}}, {{end}}{{.Type}}{{end}}]]
 	var tp Tuple{{len $futures}}[{{range $i := $futures}}{{if .NotFirst}}, {{end}}{{.Type}}{{end}}]
 	var err error
     {{range $i := $futures }}
-	{{.Name}} = Done2({{.Val}}, nil)
+	{{.Name}} = future.Done2({{.Val}}, nil)
 	{{- end}}
 	ff = Of{{len $futures}}({{range $futures}}{{if .NotFirst}}, {{end}}{{.Name}}{{end}})
 	tp, err = ff.Get()
 	assert.NoError(t, err)
-	assert.Equal(t, tp, Tuple{{len $futures}}[{{range $i := $futures}}{{if .NotFirst}}, {{end}}{{.Type}}{{end}}]{ {{range $i := $futures}}{{if .NotFirst}}, {{end}}{{.Val}}{{end}} })
+	assert.Equal(t, tp, Tuple{{len $futures}}[{{range $i := $futures}}{{if .NotFirst}}, {{end}}{{.Type}}{{end}}]{ {{- range $i := $futures}}{{if .NotFirst}}, {{end}}{{.Val}}{{end}}})
     {{range $i := $futures }}
     {{- range $j := $futures }}
     {{- if not (eq $i $j) }}
-	{{.Name}} = Done2({{.Val}}, nil)
+	{{.Name}} = future.Done2({{.Val}}, nil)
 	{{- else}}
-	{{.Name}} = Done2({{.Val}}, errors.New("{{.Name}}"))
+	{{.Name}} = future.Done2({{.Val}}, errors.New("{{.Name}}"))
 	{{- end}}
 	{{- end}}
 	ff = Of{{len $futures}}({{range $futures}}{{if .NotFirst}}, {{end}}{{.Name}}{{end}})

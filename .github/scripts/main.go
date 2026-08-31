@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
+	"go/format"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,7 +66,7 @@ type TupleData struct {
 
 func main() {
 	flag.IntVar(&count, "count", 16, "the count of tuple types to generate")
-	flag.StringVar(&outputDir, "outputDir", "../../", "the dir of output file")
+	flag.StringVar(&outputDir, "outputDir", "../../tuples", "the dir of output file")
 	flag.Parse()
 
 	// Prepare template data
@@ -143,15 +145,8 @@ func main() {
 	}
 
 	tuplePath := filepath.Join(outputDir, "tuple.go")
-	tuplefile, err := os.Create(tuplePath)
-	if err != nil {
-		fmt.Printf("Error creating tuple.go: %v\n", err)
-		os.Exit(1)
-	}
-	defer tuplefile.Close()
-
-	if err := tupleTmpl.Execute(tuplefile, data); err != nil {
-		fmt.Printf("Error executing tuple template: %v\n", err)
+	if err := renderToFile(tupleTmpl, tuplePath, data); err != nil {
+		fmt.Printf("Error generating tuple.go: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -163,19 +158,26 @@ func main() {
 	}
 
 	ofPath := filepath.Join(outputDir, "of.go")
-	offile, err := os.Create(ofPath)
-	if err != nil {
-		fmt.Printf("Error creating of.go: %v\n", err)
-		os.Exit(1)
-	}
-	defer offile.Close()
-
-	if err := ofTmpl.Execute(offile, data); err != nil {
-		fmt.Printf("Error executing of template: %v\n", err)
+	if err := renderToFile(ofTmpl, ofPath, data); err != nil {
+		fmt.Printf("Error generating of.go: %v\n", err)
 		os.Exit(1)
 	}
 
 	generateOfTest()
+}
+
+// renderToFile executes tpl into path and formats the result, so generated
+// code is always gofmt clean no matter how the templates are indented.
+func renderToFile(tpl *template.Template, path string, data any) error {
+	var buf bytes.Buffer
+	if err := tpl.Execute(&buf, data); err != nil {
+		return err
+	}
+	src, err := format.Source(buf.Bytes())
+	if err != nil {
+		return fmt.Errorf("format %s: %w", path, err)
+	}
+	return os.WriteFile(path, src, 0o644)
 }
 
 type TestCaseData struct {
@@ -221,15 +223,8 @@ func generateOfTest() {
 	}
 
 	ofTestPath := filepath.Join(outputDir, "of_test.go")
-	ofTestFile, err := os.Create(ofTestPath)
-	if err != nil {
-		fmt.Printf("Error creating of_test.go: %v\n", err)
-		os.Exit(1)
-	}
-	defer ofTestFile.Close()
-
-	if err := ofTestTmpl.Execute(ofTestFile, data); err != nil {
-		fmt.Printf("Error executing of_test template: %v\n", err)
+	if err := renderToFile(ofTestTmpl, ofTestPath, data); err != nil {
+		fmt.Printf("Error generating of_test.go: %v\n", err)
 		os.Exit(1)
 	}
 }
