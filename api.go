@@ -12,6 +12,10 @@ import (
 var ErrPanic = errors.New("async panic")
 var ErrTimeout = errors.New("future timeout")
 
+// ErrTypeMismatch is returned by Future.Cast when the resolved value cannot be
+// asserted to the requested type.
+var ErrTypeMismatch = errors.New("future type mismatch")
+
 type Result[T any] struct {
 	Val T
 	Err error
@@ -21,30 +25,6 @@ type AnyResult[T any] struct {
 	Index int
 	Val   T
 	Err   error
-}
-
-// ToChan converts a Future[T] into a single read-only channel of Result[T].
-//
-// When the Future completes, a Result[T] containing both the value and error
-// is sent through the channel, which is then closed. The channel is buffered
-// (size 1) to avoid blocking if the callback fires synchronously.
-//
-// Example:
-//
-//	resCh := ToChan(f)
-//	res := <-resCh
-//	if res.Err != nil {
-//	    fmt.Println("error:", res.Err)
-//	    return
-//	}
-//	fmt.Println("value:", res.Val)
-func ToChan[T any](f *Future[T]) <-chan Result[T] {
-	ch := make(chan Result[T], 1)
-	f.Subscribe(func(val T, err error) {
-		ch <- Result[T]{Val: val, Err: err}
-		close(ch)
-	})
-	return ch
 }
 
 func Async[T any](f func() (T, error)) *Future[T] {
@@ -97,29 +77,6 @@ func Done2[T any](val T, err error) *Future[T] {
 	return &Future[T]{state: s}
 }
 
-func Await[T any](f *Future[T]) (T, error) {
-	return f.Get()
-}
-
-func Then[T any, R any](f *Future[T], cb func(T, error) (R, error)) *Future[R] {
-	s := &state[R]{}
-	f.state.subscribe(func(val T, err error) {
-		rval, rerr := cb(val, err)
-		s.set(rval, rerr)
-	})
-	return &Future[R]{state: s}
-}
-
-func ThenAsync[T any, R any](f *Future[T], cb func(T, error) *Future[R]) *Future[R] {
-	s := &state[R]{}
-	f.state.subscribe(func(val T, err error) {
-		cb(val, err).state.subscribe(func(rval R, rerr error) {
-			s.set(rval, rerr)
-		})
-	})
-	return &Future[R]{state: s}
-}
-
 func AnyOf[T any](fs ...*Future[T]) *Future[AnyResult[T]] {
 	if len(fs) == 0 {
 		return Done(AnyResult[T]{Index: -1})
@@ -149,12 +106,6 @@ func AnyOf[T any](fs ...*Future[T]) *Future[AnyResult[T]] {
 	return &Future[AnyResult[T]]{state: s}
 }
 
-func ToAny[T any](f *Future[T]) *Future[any] {
-	return Then(f, func(val T, err error) (any, error) {
-		return val, err
-	})
-}
-
 func AllOf[T any](fs ...*Future[T]) *Future[[]T] {
 	if len(fs) == 0 {
 		return Done[[]T](nil)
@@ -182,24 +133,57 @@ func AllOf[T any](fs ...*Future[T]) *Future[[]T] {
 	return &Future[[]T]{state: s}
 }
 
-func Timeout[T any](f *Future[T], d time.Duration) *Future[T] {
-	var done uint32
-	s := &state[T]{}
-	timer := time.AfterFunc(d, func() {
-		if atomic.CompareAndSwapUint32(&done, 0, 1) {
-			var zero T
-			s.set(zero, ErrTimeout)
-		}
-	})
-	f.state.subscribe(func(val T, err error) {
-		if atomic.CompareAndSwapUint32(&done, 0, 1) {
-			s.set(val, err)
-			timer.Stop()
-		}
-	})
-	return &Future[T]{state: s}
+// Deprecated single-Future transforms, kept for source compatibility. They
+// delegate to the methods on *Future[T], which hold the only implementation;
+// see the package documentation for the layering rule.
+
+// Await blocks until f is resolved.
+//
+// Deprecated: it is a pure alias for f.Get(), use that instead.
+func Await[T any](f *Future[T]) (T, error) {
+	return f.Get()
 }
 
+// Then chains a synchronous computation onto f.
+//
+// Deprecated: use f.Then(cb).
+func Then[T any, R any](f *Future[T], cb func(T, error) (R, error)) *Future[R] {
+	return f.Then(cb)
+}
+
+// ThenAsync chains an asynchronous computation onto f.
+//
+// Deprecated: use f.ThenAsync(cb).
+func ThenAsync[T any, R any](f *Future[T], cb func(T, error) *Future[R]) *Future[R] {
+	return f.ThenAsync(cb)
+}
+
+// ToAny widens f into a *Future[any].
+//
+// Deprecated: use f.ToAny().
+func ToAny[T any](f *Future[T]) *Future[any] {
+	return f.ToAny()
+}
+
+// ToChan converts f into a single read-only channel of Result[T].
+//
+// Deprecated: use f.ToChan().
+func ToChan[T any](f *Future[T]) <-chan Result[T] {
+	return f.ToChan()
+}
+
+// Timeout wraps f so that it fails with ErrTimeout when it is not resolved
+// within d.
+//
+// Deprecated: use f.Timeout(d).
+func Timeout[T any](f *Future[T], d time.Duration) *Future[T] {
+	return f.Timeout(d)
+}
+
+// Until wraps f so that it fails with ErrTimeout when it is not resolved before
+// t.
+//
+// Deprecated: use f.Until(t).
 func Until[T any](f *Future[T], t time.Time) *Future[T] {
-	return Timeout(f, time.Until(t))
+	return f.Until(t)
 }

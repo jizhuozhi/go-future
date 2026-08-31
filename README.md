@@ -12,12 +12,88 @@
 - Task composition (`AllOf`, `AnyOf`)
 - Timeout control (`Timeout`, `Until`)
 - Full support for Go generics
+- **Fluent combinators as generic methods** (`Then[R]`, `Map[R]`, `FlatMap[R]`, `Cast[R]`, ...)
+
+## 🔧 Requirements
+
+| go-future   | Go    |
+| ----------- | ----- |
+| `>= v0.2.0` | 1.27+ |
+| `<= v0.1.6` | 1.18+ |
+
+v0.2.0 declares `go 1.27` in `go.mod` because the combinators are exposed as
+**generic methods**. See [Go 1.27 release notes](https://go.dev/doc/go1.27).
+With `GOTOOLCHAIN=auto` (the default) older toolchains download Go 1.27
+automatically.
 
 ## 🔧 Installation
 
 ```bash
 go get github.com/jizhuozhi/go-future
 ````
+
+---
+
+## ⬆️ Migrating to v0.2.0
+
+v0.2.0 is the first release built on Go 1.27 **generic methods**. It is a
+breaking release: two groups of symbols moved, everything else is additive.
+
+### 1. Go 1.27 or newer
+
+`go.mod` now declares `go 1.27`. Nothing to change in your code; with
+`GOTOOLCHAIN=auto` the toolchain is fetched for you, otherwise upgrade manually.
+Staying on Go 1.18–1.26 means staying on go-future `v0.1.6`.
+
+### 2. Tuples moved to the `tuples` subpackage
+
+`Tuple2`…`Tuple16` and `Of2`…`Of16` are rarely used and added 30 exported
+symbols to the main package, so they now live in their own package:
+
+| v0.1.6                       | v0.2.0                                                       |
+| ---------------------------- | ------------------------------------------------------------ |
+| `future.Of2(f0, f1)`         | `tuples.Of2(f0, f1)`                                         |
+| `future.Tuple2[A, B]`        | `tuples.Tuple2[A, B]`                                        |
+
+```go
+import "github.com/jizhuozhi/go-future/tuples"
+
+f := tuples.Of2(fetchUser(), fetchAccount())
+t, err := f.Get()
+```
+
+There is deliberately no alias left behind in `future`: `tuples` imports
+`future`, so keeping one would create an import cycle.
+
+### 3. Everything else is source compatible
+
+The package-level single-Future transforms still work, they are only marked
+`Deprecated:` to point at the new method form. Migrating is optional and
+mechanical:
+
+| Deprecated         | Preferred        |
+| ------------------ | ---------------- |
+| `Then(f, cb)`      | `f.Then(cb)`     |
+| `ThenAsync(f, cb)` | `f.ThenAsync(cb)` |
+| `ToAny(f)`         | `f.ToAny()`      |
+| `ToChan(f)`        | `f.ToChan()`     |
+| `Timeout(f, d)`    | `f.Timeout(d)`   |
+| `Until(f, t)`      | `f.Until(t)`     |
+| `Await(f)`         | `f.Get()`        |
+
+`AllOf`, `AnyOf`, `Async`, `Done`, `NewPromise` and all `Promise` / `Future`
+methods are unchanged.
+
+### New in v0.2.0
+
+* Single-Future transforms as generic methods: `Then[R]`, `ThenAsync[R]`,
+  `ThenGo[R]`, `Map[R]`, `FlatMap[R]`, `Cast[R]`, `Recover`, `OrElse`.
+* `dagcore.NodeInstance.Cast[T]` and `dagfunc.Program.Value[T]` /
+  `ValueAsync[T]` for reading `any`-typed results without assertions.
+* `future.ErrTypeMismatch` for failed `Cast` conversions.
+
+`dagfunc.Program.Get(sample any)` is **unchanged** — `Value[T]` is the new,
+type-safe alternative, not a replacement.
 
 ---
 
@@ -56,6 +132,38 @@ Every Future is backed by a lock-free internal state. All state transitions are 
 
 ## 🔨 Key APIs
 
+### 🧭 Layering rule
+
+One rule decides whether an operation is a package-level function or a method:
+
+| Kind                       | Form        | Members                                                                                                          |
+| -------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| Constructor                | function    | `Async`, `CtxAsync`, `Submit`, `CtxSubmit`, `Done`, `Done2`, `NewPromise`                                        |
+| Single-Future transform    | **method**  | `Then`, `ThenAsync`, `ThenGo`, `Map`, `FlatMap`, `Cast`, `Recover`, `OrElse`, `ToAny`, `ToChan`, `Timeout`, `Until` |
+| Combinator over N Futures  | function    | `AllOf`, `AnyOf`                                                                                                  |
+
+A transform that changes the result type must introduce a type parameter of its
+own, so until Go 1.27 it could only live at package scope. A combinator over
+several Futures has no single receiver, and the language forbids a generic
+method from returning its receiver's type instantiated with a receiver-derived
+type (see the restrictions below) — so combinators stay functions. Java, Scala
+and friends draw the same line: "zip N futures into one" is a static/companion
+function there as well.
+
+`AllOf` / `AnyOf` cover batches of Futures that share a type. Zipping Futures of
+**unrelated** types needs one function per arity, so `Tuple2`…`Tuple16` and
+`Of2`…`Of16` live in the [`tuples`](./tuples) subpackage — they are rarely
+needed and would otherwise add 30 exported symbols to the main package:
+
+```go
+import "github.com/jizhuozhi/go-future/tuples"
+
+f := tuples.Of2(fetchUser(), fetchAccount())
+t, err := f.Get() // t.Val0 is a User, t.Val1 is an Account
+```
+
+---
+
 ### `Async(func() (T, error)) *Future[T]`
 
 Starts a new asynchronous task in a goroutine.
@@ -83,33 +191,78 @@ val, _ := p.Future().Get()
 
 ---
 
-### `Then(f *Future[T], cb func(T, error) (R, error)) *Future[R]`
+### Single-Future transforms — `*Future[T]` methods
 
-Chains computations synchronously.
+Go 1.27 lets a **method declare its own type parameters**, so transforms live on
+`*Future[T]` and a pipeline reads left-to-right instead of inside-out.
 
 ```go
-f := future.Async(func() (int, error) { return 1, nil })
-f2 := future.Then(f, func(v int, err error) (string, error) {
-	return fmt.Sprintf("num:%d", v), err
-})
-result, _ := f2.Get()
+n, err := future.Async(fetchUser).
+    Map(func(u User) string { return u.Email }).
+    FlatMap(func(email string) *future.Future[Profile] { return future.Async(fetch(email)) }).
+    Then(func(p Profile, err error) (int, error) {
+        if err != nil {
+            return 0, err
+        }
+        return len(p.Friends), nil
+    }).
+    Get()
 ```
+
+| Method                                         | Description                                                                                                   |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `Then[R](func(T, error) (R, error))`            | Chains a synchronous step. Runs on the goroutine that completes the Future, so it must not block.              |
+| `ThenAsync[R](func(T, error) *Future[R])`       | Chains an asynchronous step and flattens the nested Future.                                                    |
+| `ThenGo[R](func(T, error) (R, error))`          | Like `Then`, but the callback is dispatched to the `Executor` so it may block. Panics are captured as `ErrPanic`. |
+| `Map[R](func(T) R)`                             | Transforms the success value; on failure `fn` is skipped and the error is propagated.                          |
+| `FlatMap[R](func(T) *Future[R])`                | `Map` + flatten; on failure `fn` is skipped and the error is propagated.                                       |
+| `Cast[R]()`                                     | Reinterprets the Future as `*Future[R]` via a dynamic type assertion. Fails with `ErrTypeMismatch`.            |
+| `Recover(func(error) (T, error))`               | Turns a failure into a success (or into another error).                                                        |
+| `OrElse(T)`                                     | Replaces a failure with a default value.                                                                       |
+| `ToAny()`, `ToChan()`, `Timeout(d)`, `Until(t)` | Interop and deadline helpers.                                                                                  |
+
+`Cast` is what makes the `map[any]any` style results of `dagcore` / `dagfunc`
+usable without type assertions:
+
+```go
+count, err := inst.Nodes()["func:TokenCount"].Cast[TokenCount]().Get()
+```
+
+#### ⚠️ Two language restrictions
+
+1. **Interface methods may not declare type parameters, and a generic method
+   cannot implement an interface method.** `Future` is therefore a concrete type
+   by design; the transforms above are resolved statically and are deliberately
+   not exposed through an interface.
+2. **A generic method must not return its receiver's type instantiated with a
+   type built from the receiver's type parameter.** The following looks natural
+   but the compiler rejects it with `instantiation cycle`:
+
+   ```go
+   // func (f *Future[T]) Combine[R any](g *Future[R]) *Future[tuples.Tuple2[T, R]]
+   ```
+
+   Type-checking `Future[T]` would require `Future[Tuple2[T, R]]`, then
+   `Future[Tuple2[Tuple2[T, R], R]]` and so on forever. Combining several
+   Futures is exactly what the package-level combinators are for.
 
 ---
 
-### `ThenAsync(f *Future[T], cb func(T, error) *Future[R]) *Future[R]`
+### Deprecated package-level transforms
 
-Chains computations with asynchronous return.
+These only existed because a method could not declare its own type parameters
+before Go 1.27. They still work and delegate to the methods above, but new code
+should use the method form.
 
-```go
-f := future.Async(func() (int, error) { return 1, nil })
-f2 := future.ThenAsync(f, func(v int, err error) *future.Future[string] {
-	return future.Async(func() (string, error) {
-		return fmt.Sprintf("async:%d", v), nil
-	})
-})
-result, _ := f2.Get()
-```
+| Deprecated       | Use instead       |
+| ---------------- | ----------------- |
+| `Then(f, cb)`    | `f.Then(cb)`      |
+| `ThenAsync(f, cb)` | `f.ThenAsync(cb)` |
+| `ToAny(f)`       | `f.ToAny()`       |
+| `ToChan(f)`      | `f.ToChan()`      |
+| `Timeout(f, d)`  | `f.Timeout(d)`    |
+| `Until(f, t)`    | `f.Until(t)`      |
+| `Await(f)`       | `f.Get()`         |
 
 ---
 
@@ -139,16 +292,16 @@ res, _ := future.AnyOf(f1, f2).Get()
 
 ---
 
-### `Timeout(f *Future[T], d time.Duration) *Future[T]`
+### `Timeout(d time.Duration) *Future[T]` / `Until(t time.Time) *Future[T]`
 
-Wraps a future and fails with `ErrTimeout` if not resolved in time.
+Fails with `ErrTimeout` if the Future is not resolved in time.
 
 ```go
 f := future.Async(func() (int, error) {
 	time.Sleep(2 * time.Second)
 	return 42, nil
 })
-val, err := future.Timeout(f, time.Second).Get()
+val, err := f.Timeout(time.Second).Get()
 // err == future.ErrTimeout
 ```
 
@@ -302,6 +455,16 @@ _ = dag.Freeze()
 
 > You must call Freeze() before Instantiate or Run. Once frozen, the DAG can be instantiated and executed multiple times in parallel.
 
+#### `(*NodeInstance).Cast[T any]() *future.Future[T]`
+
+Returns the result of a single node as a typed Future, using the generic methods
+introduced in Go 1.27. Fails with `future.ErrTypeMismatch` if the produced value
+is not assignable to `T`.
+
+```go
+count, err := inst.Nodes()["func:TokenCount"].Cast[TokenCount]().Get()
+```
+
 #### `(*DAG).Instantiate(inputs map[NodeID]any, wrappers ...NodeFuncWrapper) (*DAGInstance, error)`
 
 Creates a runtime instance of the DAG for execution.
@@ -422,8 +585,11 @@ func main() {
 	
 	// Step 4: Run
 	prog, _ := b.Compile([]any{Input("hello world")})
-	out, _ := prog.Run(context.Background())
-	fmt.Println(out[TokenCount(0)]) // Output: 11
+	_, _ = prog.Run(context.Background())
+
+	// Step 5: Read a typed result (generic method, Go 1.27+)
+	count, _ := prog.Value[TokenCount]()
+	fmt.Println(count) // Output: 11
 }
 ```
 
@@ -486,9 +652,29 @@ Executes the DAG. Outputs are keyed by result types with typed zero.
 
 Executes the DAG. Return a future with outputs are keyed by result types with typed zero.
 
-#### `(*Program).Get(any) (any, error)`
+#### `(*Program).Get(sample any) (any, error)`
 
-Gets the result value for a specific type.
+Gets the result value for a specific type. The sample is only used to determine
+the type; the caller has to assert the result.
+
+```go
+count, err := prog.Get(TokenCount(0)) // count is an any, needs an assertion
+```
+
+#### `(*Program).Value[T any]() (T, error)`
+
+Gets the typed result value produced by the node whose result type is `T`.
+Blocked until that node completes, so `Run` / `RunAsync` must have been called.
+
+```go
+count, err := prog.Value[TokenCount]() // no sample value, no type assertion
+```
+
+#### `(*Program).ValueAsync[T any]() *future.Future[T]`
+
+Same as `Value[T]` but non-blocking: it can be subscribed to before the DAG is
+started. Fails with `ErrTypeNotFound` when no node produces `T`, and with
+`future.ErrTypeMismatch` when the produced value is not assignable to `T`.
 
 #### Error propagation
 
@@ -519,7 +705,11 @@ Gets the result value for a specific type.
 
 ### 📌 Notes
 
-* Outputs are retrieved by Go types (typed zero), not labels
+* Outputs are retrieved by Go types, either through the generic methods
+  `Value[T]()` / `ValueAsync[T]()` or, for the raw map, by typed zero value
+* `Run` returns `map[any]any`, so every entry still needs an assertion; prefer
+  `Value[T]()` which does the assertion for you and reports `ErrTypeMismatch` on
+  mismatch
 * Type aliasing is required for disambiguation
 * All dependencies must be resolvable at compile-time
 

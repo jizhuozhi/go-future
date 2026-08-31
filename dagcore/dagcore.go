@@ -296,6 +296,20 @@ func (n *NodeInstance) Subgraph() *DAGInstance      { return n.subgraph }
 func (n *NodeInstance) Future() *future.Future[any] { return n.future }
 func (n *NodeInstance) Duration() time.Duration     { return n.duration }
 
+// Cast returns the result of the node as a *future.Future[T].
+//
+// Node results are carried as `any` because a DAG is built dynamically; Cast is
+// the typed bridge back to static types. It relies on the generic methods
+// introduced in Go 1.27, which let a method declare its own type parameters.
+//
+//	count, err := inst.Nodes()["func:TokenCount"].Cast[TokenCount]().Get()
+//
+// If the node fails, the error is propagated. If the produced value is not
+// assignable to T, the returned Future fails with future.ErrTypeMismatch.
+func (n *NodeInstance) Cast[T any]() *future.Future[T] {
+	return n.future.Cast[T]()
+}
+
 // DAGInstance is the per-execution runtime of a DAG
 type DAGInstance struct {
 	spec     *DAG
@@ -324,7 +338,7 @@ func (d *DAGInstance) RunAsync(ctx context.Context) *future.Future[map[NodeID]an
 		d.schedule(ctx, id)
 	}
 
-	f := future.Then(future.AllOf(futures...), func(_ []any, err error) (map[NodeID]any, error) {
+	f := future.AllOf(futures...).Then(func(_ []any, err error) (map[NodeID]any, error) {
 		if err != nil {
 			for _, n := range d.nodes {
 				if !n.future.Done() {
