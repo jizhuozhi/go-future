@@ -10,10 +10,6 @@ linters:
     - errcheck
     - unused
     - ineffassign
-  settings:
-    revive:
-      ignore-generated-header: true
-      severity: warning
   exclusions:
     rules:
       - path: _test\.go
