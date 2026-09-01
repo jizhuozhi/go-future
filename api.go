@@ -133,57 +133,79 @@ func AllOf[T any](fs ...*Future[T]) *Future[[]T] {
 	return &Future[[]T]{state: s}
 }
 
-// Deprecated single-Future transforms, kept for source compatibility. They
-// delegate to the methods on *Future[T], which hold the only implementation;
-// see the package documentation for the layering rule.
+// Single-Future transforms. These are the original package-level API and are
+// compiled on every supported Go version, including Go 1.18.
+//
+// Each one carries its own implementation rather than delegating to the method
+// form in method.go, because that file is only built when the toolchain is Go
+// 1.27 or newer. Duplicating the small bodies keeps the two variants completely
+// independent, so the Go 1.18 build has no dependency on generic methods at all.
 
 // Await blocks until f is resolved.
-//
-// Deprecated: it is a pure alias for f.Get(), use that instead.
 func Await[T any](f *Future[T]) (T, error) {
 	return f.Get()
 }
 
 // Then chains a synchronous computation onto f.
-//
-// Deprecated: use f.Then(cb).
 func Then[T any, R any](f *Future[T], cb func(T, error) (R, error)) *Future[R] {
-	return f.Then(cb)
+	s := &state[R]{}
+	f.state.subscribe(func(val T, err error) {
+		rval, rerr := cb(val, err)
+		s.set(rval, rerr)
+	})
+	return &Future[R]{state: s}
 }
 
 // ThenAsync chains an asynchronous computation onto f.
-//
-// Deprecated: use f.ThenAsync(cb).
 func ThenAsync[T any, R any](f *Future[T], cb func(T, error) *Future[R]) *Future[R] {
-	return f.ThenAsync(cb)
+	s := &state[R]{}
+	f.state.subscribe(func(val T, err error) {
+		cb(val, err).state.subscribe(func(rval R, rerr error) {
+			s.set(rval, rerr)
+		})
+	})
+	return &Future[R]{state: s}
 }
 
 // ToAny widens f into a *Future[any].
-//
-// Deprecated: use f.ToAny().
 func ToAny[T any](f *Future[T]) *Future[any] {
-	return f.ToAny()
+	return Then(f, func(val T, err error) (any, error) {
+		return val, err
+	})
 }
 
 // ToChan converts f into a single read-only channel of Result[T].
-//
-// Deprecated: use f.ToChan().
 func ToChan[T any](f *Future[T]) <-chan Result[T] {
-	return f.ToChan()
+	ch := make(chan Result[T], 1)
+	f.Subscribe(func(val T, err error) {
+		ch <- Result[T]{Val: val, Err: err}
+		close(ch)
+	})
+	return ch
 }
 
 // Timeout wraps f so that it fails with ErrTimeout when it is not resolved
 // within d.
-//
-// Deprecated: use f.Timeout(d).
 func Timeout[T any](f *Future[T], d time.Duration) *Future[T] {
-	return f.Timeout(d)
+	var done uint32
+	s := &state[T]{}
+	timer := time.AfterFunc(d, func() {
+		if atomic.CompareAndSwapUint32(&done, 0, 1) {
+			var zero T
+			s.set(zero, ErrTimeout)
+		}
+	})
+	f.state.subscribe(func(val T, err error) {
+		if atomic.CompareAndSwapUint32(&done, 0, 1) {
+			s.set(val, err)
+			timer.Stop()
+		}
+	})
+	return &Future[T]{state: s}
 }
 
 // Until wraps f so that it fails with ErrTimeout when it is not resolved before
 // t.
-//
-// Deprecated: use f.Until(t).
 func Until[T any](f *Future[T], t time.Time) *Future[T] {
-	return f.Until(t)
+	return Timeout(f, time.Until(t))
 }

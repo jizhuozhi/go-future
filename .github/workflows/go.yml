@@ -13,20 +13,27 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.18 is the minimum version in go.mod and exercises the build without
+        # generic methods; 1.27 compiles the //go:build go1.27 files.
+        go-version: ['1.18', '1.27']
     steps:
     - uses: actions/checkout@v4
 
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: '1.27'
+        go-version: ${{ matrix.go-version }}
 
     - name: golangci-lint
+      # golangci-lint only supports Go versions lower than or equal to the one
+      # it was built with, so it can only run on the newest job.
+      # See https://github.com/golangci/golangci-lint/issues/6643
+      if: matrix.go-version == '1.27'
       uses: golangci/golangci-lint-action@v9.3.0
       with:
-        # golangci-lint only supports Go versions lower than or equal to the one
-        # it was built with, so this must be a release built with go1.27 or newer.
-        # See https://github.com/golangci/golangci-lint/issues/6643
         version: v2.13.2
         args: --timeout=5m
 
@@ -34,6 +41,7 @@ jobs:
       run: go test -race -coverprofile=coverage.out -covermode=atomic -v ./...
 
     - name: Upload coverage reports to Codecov
+      if: matrix.go-version == '1.27'
       uses: codecov/codecov-action@v4.0.1
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
