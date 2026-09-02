@@ -12,19 +12,13 @@
 - Task composition (`AllOf`, `AnyOf`)
 - Timeout control (`Timeout`, `Until`)
 - Full support for Go generics
-- **Fluent combinators as generic methods** (`Then[R]`, `Map[R]`, `FlatMap[R]`, `Cast[R]`, ...)
+- **Fluent combinators as generic methods** (`Then[R]`, `Map[R]`, `FlatMap[R]`, `Cast[R]`, ...) — Go 1.27+
 
 ## 🔧 Requirements
 
-| go-future   | Go    |
-| ----------- | ----- |
-| `>= v0.2.0` | 1.27+ |
-| `<= v0.1.6` | 1.18+ |
+**Go 1.18 or newer.** The module declares `go 1.18` and stays compatible with every release since.
 
-v0.2.0 declares `go 1.27` in `go.mod` because the combinators are exposed as
-**generic methods**. See [Go 1.27 release notes](https://go.dev/doc/go1.27).
-With `GOTOOLCHAIN=auto` (the default) older toolchains download Go 1.27
-automatically.
+The generic methods (`Then[R]`, `Map[R]`, `Cast[R]`, …) are an optional enhancement compiled only when the toolchain is **Go 1.27 or newer**, guarded by `//go:build go1.27`. On older toolchains the package-level functions provide the same capabilities, so no upgrade is ever required. See [Go 1.27 release notes](https://go.dev/doc/go1.27).
 
 ## 🔧 Installation
 
@@ -36,16 +30,9 @@ go get github.com/jizhuozhi/go-future
 
 ## ⬆️ Migrating to v0.2.0
 
-v0.2.0 is the first release built on Go 1.27 **generic methods**. It is a
-breaking release: two groups of symbols moved, everything else is additive.
+v0.2.0 adds generic methods on top of the existing API. Exactly one group of symbols moved; everything else is additive and **no Go upgrade is required**.
 
-### 1. Go 1.27 or newer
-
-`go.mod` now declares `go 1.27`. Nothing to change in your code; with
-`GOTOOLCHAIN=auto` the toolchain is fetched for you, otherwise upgrade manually.
-Staying on Go 1.18–1.26 means staying on go-future `v0.1.6`.
-
-### 2. Tuples moved to the `tuples` subpackage
+### 1. Tuples moved to the `tuples` subpackage (breaking)
 
 `Tuple2`…`Tuple16` and `Of2`…`Of16` are rarely used and added 30 exported
 symbols to the main package, so they now live in their own package:
@@ -65,35 +52,38 @@ t, err := f.Get()
 There is deliberately no alias left behind in `future`: `tuples` imports
 `future`, so keeping one would create an import cycle.
 
-### 3. Everything else is source compatible
+### 2. No Go upgrade required
 
-The package-level single-Future transforms still work, they are only marked
-`Deprecated:` to point at the new method form. Migrating is optional and
-mechanical:
+The module still declares `go 1.18`. The generic methods live in files guarded by `//go:build go1.27`, which tests the **toolchain** version rather than the `go` directive, so they light up automatically without touching `go.mod`.
 
-| Deprecated         | Preferred        |
-| ------------------ | ---------------- |
-| `Then(f, cb)`      | `f.Then(cb)`     |
+| Toolchain      | What compiles                                             |
+| -------------- | --------------------------------------------------------- |
+| Go 1.18 – 1.26 | package-level functions only: `Then(f, cb)`, `Timeout(f, d)`, … |
+| Go 1.27+       | both forms: `f.Then(cb)` **and** `Then(f, cb)`            |
+
+### 3. Package-level functions are not deprecated
+
+They remain a fully supported API, not a compatibility shim. The two forms do **not** delegate to each other, by design: the package-level functions must not depend on a file that can be excluded from the build, so each variant carries its own (small, self-contained) body.
+
+| Function           | Method form       |
+| ------------------ | ----------------- |
+| `Then(f, cb)`      | `f.Then(cb)`      |
 | `ThenAsync(f, cb)` | `f.ThenAsync(cb)` |
-| `ToAny(f)`         | `f.ToAny()`      |
-| `ToChan(f)`        | `f.ToChan()`     |
-| `Timeout(f, d)`    | `f.Timeout(d)`   |
-| `Until(f, t)`      | `f.Until(t)`     |
-| `Await(f)`         | `f.Get()`        |
+| `ToAny(f)`         | `f.ToAny()`       |
+| `ToChan(f)`        | `f.ToChan()`      |
+| `Timeout(f, d)`    | `f.Timeout(d)`    |
+| `Until(f, t)`      | `f.Until(t)`      |
+| `Await(f)`         | `f.Get()`         |
 
-`AllOf`, `AnyOf`, `Async`, `Done`, `NewPromise` and all `Promise` / `Future`
-methods are unchanged.
+`AllOf`, `AnyOf`, `Async`, `Done`, `NewPromise` and all `Promise` / `Future` methods are unchanged.
 
-### New in v0.2.0
+### New in v0.2.0 (Go 1.27+)
 
-* Single-Future transforms as generic methods: `Then[R]`, `ThenAsync[R]`,
-  `ThenGo[R]`, `Map[R]`, `FlatMap[R]`, `Cast[R]`, `Recover`, `OrElse`.
-* `dagcore.NodeInstance.Cast[T]` and `dagfunc.Program.Value[T]` /
-  `ValueAsync[T]` for reading `any`-typed results without assertions.
+* Single-Future transforms as generic methods: `Then[R]`, `ThenAsync[R]`, `ThenGo[R]`, `Map[R]`, `FlatMap[R]`, `Cast[R]`, `Recover`, `OrElse`.
+* `dagcore.NodeInstance.Cast[T]` and `dagfunc.Program.Value[T]` / `ValueAsync[T]` for reading `any`-typed results without assertions.
 * `future.ErrTypeMismatch` for failed `Cast` conversions.
 
-`dagfunc.Program.Get(sample any)` is **unchanged** — `Value[T]` is the new,
-type-safe alternative, not a replacement.
+`dagfunc.Program.Get(sample any)` is **unchanged** — `Value[T]` is a type-safe alternative, not a replacement.
 
 ---
 
@@ -142,13 +132,11 @@ One rule decides whether an operation is a package-level function or a method:
 | Single-Future transform    | **method**  | `Then`, `ThenAsync`, `ThenGo`, `Map`, `FlatMap`, `Cast`, `Recover`, `OrElse`, `ToAny`, `ToChan`, `Timeout`, `Until` |
 | Combinator over N Futures  | function    | `AllOf`, `AnyOf`                                                                                                  |
 
-A transform that changes the result type must introduce a type parameter of its
-own, so until Go 1.27 it could only live at package scope. A combinator over
-several Futures has no single receiver, and the language forbids a generic
-method from returning its receiver's type instantiated with a receiver-derived
-type (see the restrictions below) — so combinators stay functions. Java, Scala
-and friends draw the same line: "zip N futures into one" is a static/companion
-function there as well.
+A transform that changes the result type must introduce a type parameter of its own, so until Go 1.27 it could only live at package scope. Since Go 1.27 it can be a method, and the method form is what you want to reach for: it chains left-to-right and it is discoverable through completion.
+
+Both forms coexist. The methods are compiled only under a Go 1.27+ toolchain (`//go:build go1.27`); the package-level functions are always available, which is what keeps Go 1.18 working.
+
+A combinator over several Futures has no single receiver, and the language forbids a generic method from returning its receiver's type instantiated with a receiver-derived type (see the restrictions below) — so combinators stay functions. Java, Scala and friends draw the same line: "zip N futures into one" is a static/companion function there as well.
 
 `AllOf` / `AnyOf` cover batches of Futures that share a type. Zipping Futures of
 **unrelated** types needs one function per arity, so `Tuple2`…`Tuple16` and
@@ -192,6 +180,8 @@ val, _ := p.Future().Get()
 ---
 
 ### Single-Future transforms — `*Future[T]` methods
+
+> **Requires a Go 1.27+ toolchain.** These files are guarded by `//go:build go1.27`. On Go 1.18–1.26 the package-level functions below provide the same capabilities.
 
 Go 1.27 lets a **method declare its own type parameters**, so transforms live on
 `*Future[T]` and a pipeline reads left-to-right instead of inside-out.
@@ -248,21 +238,19 @@ count, err := inst.Nodes()["func:TokenCount"].Cast[TokenCount]().Get()
 
 ---
 
-### Deprecated package-level transforms
+### Package-level transforms (all Go versions)
 
-These only existed because a method could not declare its own type parameters
-before Go 1.27. They still work and delegate to the methods above, but new code
-should use the method form.
+These are the original API and the only form available on Go 1.18–1.26. They are **not** deprecated, and they do not delegate to the methods above: each variant carries its own implementation so that the Go 1.18 build has no dependency on a file that may be excluded from it.
 
-| Deprecated       | Use instead       |
-| ---------------- | ----------------- |
-| `Then(f, cb)`    | `f.Then(cb)`      |
-| `ThenAsync(f, cb)` | `f.ThenAsync(cb)` |
-| `ToAny(f)`       | `f.ToAny()`       |
-| `ToChan(f)`      | `f.ToChan()`      |
-| `Timeout(f, d)`  | `f.Timeout(d)`    |
-| `Until(f, t)`    | `f.Until(t)`      |
-| `Await(f)`       | `f.Get()`         |
+| Function           | Method form (Go 1.27+) |
+| ------------------ | ---------------------- |
+| `Then(f, cb)`      | `f.Then(cb)`           |
+| `ThenAsync(f, cb)` | `f.ThenAsync(cb)`      |
+| `ToAny(f)`         | `f.ToAny()`            |
+| `ToChan(f)`        | `f.ToChan()`           |
+| `Timeout(f, d)`    | `f.Timeout(d)`         |
+| `Until(f, t)`      | `f.Until(t)`           |
+| `Await(f)`         | `f.Get()`              |
 
 ---
 
@@ -457,9 +445,9 @@ _ = dag.Freeze()
 
 #### `(*NodeInstance).Cast[T any]() *future.Future[T]`
 
-Returns the result of a single node as a typed Future, using the generic methods
-introduced in Go 1.27. Fails with `future.ErrTypeMismatch` if the produced value
-is not assignable to `T`.
+Returns the result of a single node as a typed Future, using the generic methods introduced in Go 1.27. Fails with `future.ErrTypeMismatch` if the produced value is not assignable to `T`.
+
+> **Requires a Go 1.27+ toolchain** — the file is guarded by `//go:build go1.27`. Use `NodeInstance.Future()` and assert manually on older versions.
 
 ```go
 count, err := inst.Nodes()["func:TokenCount"].Cast[TokenCount]().Get()
@@ -662,6 +650,8 @@ count, err := prog.Get(TokenCount(0)) // count is an any, needs an assertion
 ```
 
 #### `(*Program).Value[T any]() (T, error)`
+
+> **Requires a Go 1.27+ toolchain**, as do `ValueAsync[T]`. `Get(sample any)` is the version-independent alternative.
 
 Gets the typed result value produced by the node whose result type is `T`.
 Blocked until that node completes, so `Run` / `RunAsync` must have been called.

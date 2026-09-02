@@ -21,9 +21,12 @@
 //
 // A transform that changes the result type has to introduce a type parameter of
 // its own. That was impossible for methods until Go 1.27 added generic methods,
-// which is why these transforms used to live at package scope. They are now
-// methods, and the methods hold the only implementation; the old package-level
-// forms remain as deprecated shims for source compatibility.
+// which is why these transforms originally lived at package scope only.
+//
+// Both forms are now available. The methods are the expressive, chainable form;
+// the package-level functions are the original API and remain fully supported,
+// not deprecated. They are independent implementations rather than shims, see
+// "Build tags" below.
 //
 // A combinator over several Futures has no single receiver, so it stays a
 // function. Java, Scala and friends draw the same line: "zip N futures into
@@ -58,4 +61,22 @@
 //     package therefore returns *Future[R] with a fresh R, and combining
 //     Futures is left to the package-level combinators and to the tuples
 //     subpackage.
+//
+// # Build tags
+//
+// The module declares go 1.18 in go.mod, so it keeps building with Go 1.18
+// through Go 1.26. The generic methods live in files guarded by
+//
+//	//go:build go1.27
+//
+// which is satisfied by the toolchain version, not by the go directive. On
+// Go 1.27 and newer both the methods and the package-level functions exist; on
+// older toolchains only the package-level functions are compiled.
+//
+// This is why the two forms do not delegate to each other: the package-level
+// functions must not depend on a file that may be excluded from the build. The
+// duplicated bodies are small and self-contained.
+//
+// The same guard applies to dagcore.NodeInstance.Cast and to
+// dagfunc.Program.Value / ValueAsync.
 package future
