@@ -208,19 +208,20 @@ func (b *Builder) Group(ns string, define func(*Builder) error) error {
 	// Shallow copy: the DAG and every registry map are shared with the parent,
 	// only the id prefix differs.
 	sub := *b
-	sub.ns = b.join(ns)
+	if ns != "" {
+		sub.ns = b.join(ns)
+	}
 	return define(&sub)
 }
 
+// join prefixes a node name with the namespace of the Builder. Callers always
+// pass a non-empty name: a node without an explicit one falls back to its type
+// derived default first.
 func (b *Builder) join(name string) string {
-	switch {
-	case b.ns == "":
+	if b.ns == "" {
 		return name
-	case name == "":
-		return b.ns
-	default:
-		return b.ns + "." + name
 	}
+	return b.ns + "." + name
 }
 
 // Provide declares an input node of the type of sample.

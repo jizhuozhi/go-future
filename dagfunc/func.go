@@ -165,7 +165,9 @@ func futureElem(t reflect.Type) (reflect.Type, bool) {
 	if elem.Kind() != reflect.Struct || elem.PkgPath() != futurePkgPath {
 		return nil, false
 	}
-	if name := elem.Name(); stripTypeArgs(name) != "Future" {
+	// Instantiated generics are named either "Future" or "Future[T]",
+	// depending on the toolchain, so the prefix is all that can be compared.
+	if !strings.HasPrefix(elem.Name(), "Future") {
 		return nil, false
 	}
 	if elem.NumField() != 1 {
@@ -180,13 +182,6 @@ func futureElem(t reflect.Type) (reflect.Type, bool) {
 		return nil, false
 	}
 	return val.Type, true
-}
-
-func stripTypeArgs(name string) string {
-	if i := strings.IndexByte(name, '['); i >= 0 {
-		return name[:i]
-	}
-	return name
 }
 
 func runtimeFuncName(fn any) string {
