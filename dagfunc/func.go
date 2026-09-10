@@ -158,7 +158,7 @@ func (spec *funcSpec) call(args []reflect.Value) (any, error) {
 
 // futureElem reports whether t is *future.Future[R] and returns R.
 func futureElem(t reflect.Type) (reflect.Type, bool) {
-	if t.Kind() != reflect.Ptr {
+	if t.Kind() != reflect.Pointer {
 		return nil, false
 	}
 	elem := t.Elem()
@@ -172,7 +172,7 @@ func futureElem(t reflect.Type) (reflect.Type, bool) {
 		return nil, false
 	}
 	state := elem.Field(0).Type
-	if state.Kind() != reflect.Ptr {
+	if state.Kind() != reflect.Pointer {
 		return nil, false
 	}
 	val, ok := state.Elem().FieldByName("val")
@@ -218,7 +218,7 @@ func valueOf(v any, t reflect.Type) reflect.Value {
 func isNilValue(v reflect.Value) bool {
 	switch v.Kind() {
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map,
-		reflect.Ptr, reflect.Slice, reflect.UnsafePointer:
+		reflect.Pointer, reflect.Slice, reflect.UnsafePointer:
 		return v.IsNil()
 	}
 	return false
