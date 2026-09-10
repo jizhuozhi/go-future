@@ -53,3 +53,70 @@ func TestDagFuncGenericGet(t *testing.T) {
 	_, err = prog.ValueAsync[ResultC]().Cast[ResultD]().Get()
 	assert.ErrorIs(t, err, future.ErrTypeMismatch)
 }
+
+func TestDagFuncGenericAmbiguous(t *testing.T) {
+	builder := New()
+	assert.NoError(t, builder.Provide(InputA{}))
+	assert.NoError(t, builder.Use(fnCFromA, Name("slow")))
+	assert.NoError(t, builder.Use(func(ctx context.Context, a InputA) (ResultC, error) {
+		return ResultC{Sum: 1}, nil
+	}, Name("fast")))
+	assert.NoError(t, builder.Freeze())
+
+	prog, err := builder.Compile([]any{InputA{Value: 1}})
+	assert.NoError(t, err)
+	_, err = prog.Run(context.Background())
+	assert.NoError(t, err)
+
+	// Two nodes produce ResultC, so the type alone is not enough.
+	_, err = prog.Value[ResultC]()
+	assert.ErrorIs(t, err, ErrAmbiguousType)
+
+	node, ok := prog.NodeByID("fast")
+	assert.True(t, ok)
+	got, err := node.Cast[ResultC]().Get()
+	assert.NoError(t, err)
+	assert.Equal(t, ResultC{Sum: 1}, got)
+}
+
+func TestDagFuncGenericMultiOutput(t *testing.T) {
+	builder := New()
+	assert.NoError(t, builder.Provide(InputA{}))
+	assert.NoError(t, builder.Use(func(ctx context.Context, a InputA) (Count, Report, error) {
+		return Count(a.Value * 2), Report("done"), nil
+	}))
+	assert.NoError(t, builder.Freeze())
+
+	prog, err := builder.Compile([]any{InputA{Value: 2}})
+	assert.NoError(t, err)
+	_, err = prog.Run(context.Background())
+	assert.NoError(t, err)
+
+	count, err := prog.Value[Count]()
+	assert.NoError(t, err)
+	assert.Equal(t, Count(4), count)
+
+	report, err := prog.Value[Report]()
+	assert.NoError(t, err)
+	assert.Equal(t, Report("done"), report)
+}
+
+func TestDagFuncGenericSubgraph(t *testing.T) {
+	sub := New()
+	assert.NoError(t, sub.Provide(Question("")))
+	assert.NoError(t, sub.Use(retrieveCandidate))
+
+	root := New()
+	assert.NoError(t, root.Provide(Question("")))
+	assert.NoError(t, root.Subgraph(sub, Name("qa"), Outputs(Candidate(""))))
+	assert.NoError(t, root.Freeze())
+
+	prog, err := root.Compile([]any{Question("hello")})
+	assert.NoError(t, err)
+	_, err = prog.Run(context.Background())
+	assert.NoError(t, err)
+
+	candidate, err := prog.Value[Candidate]()
+	assert.NoError(t, err)
+	assert.Equal(t, Candidate("candidate:hello"), candidate)
+}
