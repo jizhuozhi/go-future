@@ -1,0 +1,19 @@
+# Codecov reports on every pull request. The project target follows the base
+# branch, while the patch target is set below 100% on purpose: a few branches
+# of dagfunc are unreachable by construction (defensive returns after dagcore
+# has already validated the input, fallbacks for reflect shapes that cannot
+# occur), and testing them would mean weakening the code to please the metric.
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: 95%
+        threshold: 1%
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
