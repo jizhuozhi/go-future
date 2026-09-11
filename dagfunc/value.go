@@ -3,7 +3,6 @@
 package dagfunc
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/jizhuozhi/go-future"
@@ -21,17 +20,18 @@ import (
 //	c, err := prog.ValueAsync[ResultC]().Get()
 //
 // If no node produces T the Future fails immediately with ErrTypeNotFound; if
-// the produced value is not assignable to T it fails with future.ErrTypeMismatch.
+// several nodes produce T it fails with ErrAmbiguousType, and NodeByID plus
+// dagcore.NodeInstance.Cast selects one of them; if the produced value is not
+// assignable to T it fails with future.ErrTypeMismatch.
 func (p *Program) ValueAsync[T any]() *future.Future[T] {
 	var zero T
 	// reflect.TypeFor[T]() would be clearer but is Go 1.22+, and this file must
 	// stay buildable under the module's declared language version.
-	typ := reflect.TypeOf((*T)(nil)).Elem()
-	id, ok := p.builder.typeToID[typ]
-	if !ok {
-		return future.Done2(zero, fmt.Errorf("%w: %v", ErrTypeNotFound, typ))
+	f, err := p.outputFuture(reflect.TypeOf((*T)(nil)).Elem())
+	if err != nil {
+		return future.Done2(zero, err)
 	}
-	return p.execution.Nodes()[id].Cast[T]()
+	return f.Cast[T]()
 }
 
 // Value returns the output of the node producing T, blocking until that node

@@ -85,6 +85,29 @@ They remain a fully supported API, not a compatibility shim. The two forms do **
 
 `dagfunc.Program.Get(sample any)` is **unchanged** — `Value[T]` is a type-safe alternative, not a replacement.
 
+### New in v0.2.0: dagfunc reaches dagcore parity (additive)
+
+`dagfunc` used to be a thin type-driven wrapper: one node per result type, one
+accepted signature, no way to name a node or to wrap it. It now covers what
+`dagcore` offers while keeping the type-based wiring:
+
+* `Provide` and `Use` take options: `Name`, `After`, `From[T]`, `Timeout`,
+  `Retry`, `Recover[R]`, `OrElse[R]`, `Wrap`, `Default`.
+* `Use` accepts functions without a context, without an error, with several
+  results, with no result at all, and functions returning a `*future.Future[R]`.
+* `Subgraph` embeds a `Builder` as a node, `Group` namespaces nodes.
+* `Compile` takes `dagcore` wrappers; `Program` exposes `Node`, `NodeByID` and
+  `Instance`.
+
+Everything that compiled before still compiles — `Provide(v)`, `Use(fn)`,
+`Compile(inputs)`, `Run`, `Get(sample)` and `Value[T]` keep their signatures.
+Two behaviours changed on purpose:
+
+| Before                                                | Now                                                        |
+| ----------------------------------------------------- | ---------------------------------------------------------- |
+| `func() (int, error)` rejected with `ErrFuncSignature`  | valid: a source node with no context and no dependencies   |
+| non-comparable output panicked when building `Run`'s map | skipped in the map, still readable with `Get` / `Value[T]` |
+
 ---
 
 ## 🚀 Quick Start
@@ -524,11 +547,27 @@ Ideal for:
 
 ### ✅ Features
 
+Wiring
+
 - ✅ Type-based dependency inference
+- ✅ Every Go function shape that reduces to "dependencies in, results out"
+- ✅ Nodes with several results, and nodes with no result at all
+- ✅ Nodes returning a `*future.Future[R]`, for already asynchronous APIs
+- ✅ Explicit node ids, plus namespaces through `Group`
+- ✅ Several nodes of the same type, selected with `From[T](id)`
+
+Composition
+
+- ✅ Subgraphs: a whole `Builder` embedded as a single node, nested arbitrarily
+- ✅ Per-node and per-run `dagcore` wrappers, for tracing, metrics and logging
+- ✅ Per-node `Timeout`, `Retry`, `Recover` and `OrElse`
+- ✅ Optional inputs through `Default`, and input binding by node id
+
+Execution
+
 - ✅ Fully integrated with `go-future` for parallel execution
-- ✅ Reusable functions with Go-style declarations
 - ✅ Built-in support for context propagation and error handling
-- ✅ Alias support to distinguish same-type dependencies
+- ✅ Typed result access without sample values or assertions (`Value[T]`)
 
 ---
 
@@ -587,11 +626,10 @@ func main() {
 
 `dagfunc` determines node dependencies using **parameter types** and result types:
 
-* Each function must accept `context.Context` as the first argument
 * Inputs and outputs must use unique Go types or **aliases**
 * The DAG will automatically determine execution order
 
-> ⚠️ If two inputs/outputs are of the same type (e.g., multiple `string` values), use `type alias` to disambiguate.
+> ⚠️ If two inputs/outputs are of the same type (e.g., multiple `string` values), use `type alias` to disambiguate — or give the nodes a `Name` and select one with `From[T](id)`.
 
 #### With type alias
 
@@ -608,6 +646,41 @@ b.Use(func(ctx context.Context, g Greeting) (string, error) {
 })
 ```
 
+#### Accepted function signatures
+
+`Use` accepts every shape that reduces to "take dependencies, produce results":
+
+| Signature                                        | Meaning                                     |
+| ------------------------------------------------ | ------------------------------------------- |
+| `func(ctx, A, B) (R, error)`                     | canonical form                              |
+| `func(ctx, A, B) R`                              | cannot fail                                 |
+| `func(ctx, A, B) error`                          | sink, produces no value                     |
+| `func(ctx, A, B) (R, S, error)`                  | several results                             |
+| `func(ctx, A, B) (R, S)`                         | several results, cannot fail                |
+| `func(A, B) (R, error)`                          | no context                                  |
+| `func(ctx) (R, error)`                           | source, no dependencies                     |
+| `func(ctx, A) *future.Future[R]`                 | asynchronous node                           |
+
+The trailing `error` is optional and always last; every other result becomes an output of the node and can be depended on by its type. A node returning `*future.Future[R]` waits for that Future instead of computing `R` inline.
+
+Three rules decide what counts as an error:
+
+* **is-a, not as-a**: only a result declared as exactly `error` is an error. A named type that merely implements it is an ordinary value, so `func(ctx) (Result, MyError)` produces two values and can never fail, while `func(ctx) (Result, error)` produces one value and may fail. What the signature says is what the graph does.
+* **at most one error, and it has to be the last result**: `(R, error, error)` and `(error, R)` are rejected with `ErrFuncSignature` instead of being guessed at.
+* **a failed node publishes nothing**, not even the values it computed before failing.
+
+#### Node ids
+
+Every node has a string id, used by `NodeByID`, `Wrap` and `dagviz`:
+
+| Node                | Default id                        |
+| ------------------- | --------------------------------- |
+| `Provide(T{})`      | `input:<type>`                    |
+| `Use` with results  | `func:<type>`, or `func:<t1>,<t2>` |
+| `Use` without results | `func:<symbol>`                 |
+| `Name("x")`         | `x`                               |
+| inside `Group("g")` | `g.<default>`                     |
+
 ---
 
 ### 🧰 API Overview
@@ -616,25 +689,92 @@ b.Use(func(ctx context.Context, g Greeting) (string, error) {
 
 Creates a new DAG builder.
 
-#### `(*Builder).Provide(val any) error`
+#### `(*Builder).Provide(sample any, opts ...Option) error`
 
-Declares a root node with known value.
+Declares an input node of the type of `sample`; the value itself is supplied at
+`Compile`. `Default(val)` makes it optional, `Name(id)` gives it an explicit id.
 
-#### `(*Builder).Use(fn any) error`
+#### `(*Builder).Use(fn any, opts ...Option) error`
 
-Registers a function as a DAG node. Must match:
+Registers a function as a DAG node. See
+[accepted function signatures](#accepted-function-signatures).
+
+#### `(*Builder).Subgraph(sub *Builder, opts ...Option) error`
+
+Embeds a whole builder as a single node. The inputs of `sub` are fed from the
+nodes of the parent producing those types (or from their `Default`), and
+`Outputs(...)` declares which results the parent can read:
 
 ```go
-func(ctx context.Context, A, B, ...) (X, Y, ..., error)
+qa := dagfunc.New()
+_ = qa.Provide(Question(""))
+_ = qa.Use(retrieve)   // func(ctx, Question) (Candidate, error)
+_ = qa.Use(rerank)     // func(ctx, Question, Candidate) (Ranked, error)
+
+root := dagfunc.New()
+_ = root.Provide(Question(""))
+_ = root.Subgraph(qa, dagfunc.Name("qa"), dagfunc.Outputs(Ranked{}))
+_ = root.Use(answer)   // func(ctx, Question, Ranked) (Answer, error)
 ```
 
-#### `(*Builder).Compile(inputs []any) (*Program, error)`
+The subgraph keeps its own scheduler, so its nodes still run in parallel, and
+subgraphs nest. The parent freezes it, so `qa.Freeze()` is optional.
 
-Builds a DAG using the provided inputs.
+#### `(*Builder).Group(ns string, define func(*Builder) error) error`
+
+Registers every node of `define` under the namespace `ns`. It is only a naming
+device: the type registry is shared, so the nodes stay part of the same graph.
+
+#### Options
+
+| Option                       | Applies to                    | Effect                                              |
+| ---------------------------- | ----------------------------- | --------------------------------------------------- |
+| `Name(id)`                   | all                           | explicit node id                                    |
+| `After(deps...)`             | all                           | ordering-only dependency, by id or by sample type   |
+| `From[T](id)`                | `Use`                         | pins one parameter to a specific node               |
+| `Timeout(d)`                 | `Use`                         | bounds the context handed to the node               |
+| `Retry(n)` / `RetryWith(n, d)` | `Use`                       | reruns the node after a failure                     |
+| `Recover[R](fn)`             | `Use` (one result)            | turns a failure into a value                        |
+| `OrElse[R](val)`             | `Use` (one result)            | replaces a failure with a value                     |
+| `Wrap(w...)`                 | all                           | `dagcore` wrappers for this node only               |
+| `Default(val)`               | `Provide`                     | value used when `Compile` gets none                 |
+| `Outputs(samples...)`        | `Subgraph`                    | results exposed to the parent                       |
+
+The built-ins are layered from the inside out as retry, timeout, fallback, and
+`Wrap` wrappers always observe the final result:
+
+```go
+_ = b.Use(search,
+    dagfunc.Name("search"),
+    dagfunc.Timeout(200*time.Millisecond),
+    dagfunc.RetryWith(2, 10*time.Millisecond),
+    dagfunc.OrElse[Result](Result{}),
+)
+```
+
+#### `(*Builder).Freeze() error` / `(*Builder).Compile(inputs []any, wrappers ...dagcore.NodeFuncWrapper) (*Program, error)`
+
+`Freeze` verifies the graph and locks it. `Compile` binds the inputs — matched
+by type, or by node id with `dagfunc.Input(id, val)` — and returns a `Program`.
+The variadic wrappers apply to every node of that run and are the hook for
+tracing, metrics and logging, exactly like `dagcore.Instantiate`:
+
+```go
+prog, err := b.Compile(inputs, func(n *dagcore.NodeInstance, run dagcore.NodeFunc) dagcore.NodeFunc {
+    return func(ctx context.Context, deps map[dagcore.NodeID]any) (any, error) {
+        start := time.Now()
+        out, err := run(ctx, deps)
+        log.Printf("%s took %s", n.ID(), time.Since(start))
+        return out, err
+    }
+})
+```
 
 #### `(*Program).Run(ctx context.Context) (map[any]any, error)`
 
-Executes the DAG. Outputs are keyed by result types with typed zero.
+Executes the DAG. Outputs are keyed by result types with typed zero. Output
+types that are not comparable (slices, maps) cannot be map keys and are omitted;
+read them with `Value[T]`, `Get` or `Node`.
 
 #### `(*Program).RunAsync(ctx context.Context) *future.Future[map[any]any]`
 
@@ -663,14 +803,29 @@ count, err := prog.Value[TokenCount]() // no sample value, no type assertion
 #### `(*Program).ValueAsync[T any]() *future.Future[T]`
 
 Same as `Value[T]` but non-blocking: it can be subscribed to before the DAG is
-started. Fails with `ErrTypeNotFound` when no node produces `T`, and with
-`future.ErrTypeMismatch` when the produced value is not assignable to `T`.
+started. Fails with `ErrTypeNotFound` when no node produces `T`, with
+`ErrAmbiguousType` when several do, and with `future.ErrTypeMismatch` when the
+produced value is not assignable to `T`.
+
+#### `(*Program).Node(sample any) (*dagcore.NodeInstance, error)` / `(*Program).NodeByID(id string) (*dagcore.NodeInstance, bool)`
+
+Returns the runtime node behind a type or an id, which carries its `Future`, its
+`Duration`, its dependencies and, on Go 1.27, `Cast[T]`. `NodeByID` is how the
+results of two same-typed nodes are told apart.
+
+#### `(*Program).Instance() *dagcore.DAGInstance`
+
+Hands over the whole runtime, which is what `dagviz` renders:
+
+```go
+fmt.Println(dagviz.ToMermaid(prog.Instance()))
+```
 
 #### Error propagation
 
 * DAG execution will **fail fast** by default
 * Downstream nodes will not be executed if inputs fail
-* You can customize error behavior using `dagcore`
+* A node can opt out with `Recover` / `OrElse`, or with a `dagcore` wrapper
 
 ---
 
@@ -700,8 +855,11 @@ started. Fails with `ErrTypeNotFound` when no node produces `T`, and with
 * `Run` returns `map[any]any`, so every entry still needs an assertion; prefer
   `Value[T]()` which does the assertion for you and reports `ErrTypeMismatch` on
   mismatch
-* Type aliasing is required for disambiguation
-* All dependencies must be resolvable at compile-time
+* Type aliasing, `Name` or `From[T](id)` is required for disambiguation
+* All dependencies must be resolvable before `Freeze`
+* `dagfunc` is a layer over `dagcore`, not a subset of it: naming, per-node
+  wrappers, subgraphs and defaults are reachable without dropping down, and
+  `Program.Instance()` hands over the `dagcore` runtime when needed
 
 ## 🔐 License
 
