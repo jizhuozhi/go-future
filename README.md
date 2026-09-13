@@ -18,7 +18,7 @@
 
 **Go 1.18 or newer.** The module declares `go 1.18` and stays compatible with every release since.
 
-The generic methods (`Then[R]`, `Map[R]`, `Cast[R]`, …) are an optional enhancement compiled only when the toolchain is **Go 1.27 or newer**, guarded by `//go:build go1.27`. On older toolchains the package-level functions provide the same capabilities, so no upgrade is ever required. See [Go 1.27 release notes](https://go.dev/doc/go1.27).
+The generic methods (`Then[R]`, `Map[R]`, `Cast[R]`, …) are an optional enhancement compiled only when the toolchain is **Go 1.27 or newer**, guarded by `//go:build go1.27`. Every transform that existed before v0.2.0 has both a method and a package-level form and keeps building on Go 1.18; `ThenGo`, `Map`, `FlatMap`, `Cast`, `Recover` and `OrElse` were added in v0.2.0 and exist in method form only, so those six need Go 1.27. See [Go 1.27 release notes](https://go.dev/doc/go1.27).
 
 ## 🔧 Installation
 
@@ -60,6 +60,8 @@ The module still declares `go 1.18`. The generic methods live in files guarded b
 | -------------- | --------------------------------------------------------- |
 | Go 1.18 – 1.26 | package-level functions only: `Then(f, cb)`, `Timeout(f, d)`, … |
 | Go 1.27+       | both forms: `f.Then(cb)` **and** `Then(f, cb)`            |
+
+"No Go upgrade required" is about code that already builds: every transform v0.1.6 exposed is still there on every toolchain. The six transforms introduced in v0.2.0 (`ThenGo`, `Map`, `FlatMap`, `Cast`, `Recover`, `OrElse`) are the exception — they are Go 1.27+ only, because they were written against generic methods and have no package-level form.
 
 ### 3. Package-level functions are not deprecated
 
@@ -155,9 +157,9 @@ One rule decides whether an operation is a package-level function or a method:
 | Single-Future transform    | **method**  | `Then`, `ThenAsync`, `ThenGo`, `Map`, `FlatMap`, `Cast`, `Recover`, `OrElse`, `ToAny`, `ToChan`, `Timeout`, `Until` |
 | Combinator over N Futures  | function    | `AllOf`, `AnyOf`                                                                                                  |
 
-A transform that changes the result type must introduce a type parameter of its own, so until Go 1.27 it could only live at package scope. Since Go 1.27 it can be a method, and the method form is what you want to reach for: it chains left-to-right and it is discoverable through completion.
+A transform that changes the result type must introduce a type parameter of its own, so before Go 1.27 it had to be a package-level function taking the Future as its first argument. Since Go 1.27 it can be a method, and the method form is what you want to reach for: it chains left-to-right and it is discoverable through completion. v0.2.0 added six transforms (`ThenGo`, `Map`, `FlatMap`, `Cast`, `Recover`, `OrElse`) in method form only, so those six need Go 1.27.
 
-Both forms coexist. The methods are compiled only under a Go 1.27+ toolchain (`//go:build go1.27`); the package-level functions are always available, which is what keeps Go 1.18 working.
+Both forms coexist. The methods are compiled only under a Go 1.27+ toolchain (`//go:build go1.27`); the package-level functions that predate v0.2.0 are always available, which is what keeps Go 1.18 working.
 
 A combinator over several Futures has no single receiver, and the language forbids a generic method from returning its receiver's type instantiated with a receiver-derived type (see the restrictions below) — so combinators stay functions. Java, Scala and friends draw the same line: "zip N futures into one" is a static/companion function there as well.
 
@@ -204,7 +206,7 @@ val, _ := p.Future().Get()
 
 ### Single-Future transforms — `*Future[T]` methods
 
-> **Requires a Go 1.27+ toolchain.** These files are guarded by `//go:build go1.27`. On Go 1.18–1.26 the package-level functions below provide the same capabilities.
+> **Requires a Go 1.27+ toolchain.** These files are guarded by `//go:build go1.27`. `ThenGo`, `Map`, `FlatMap`, `Cast`, `Recover` and `OrElse` are new in v0.2.0 and have no package-level form, so on Go 1.18–1.26 those six are unavailable; the other transforms have a counterpart in [Package-level transforms](#package-level-transforms-all-go-versions).
 
 Go 1.27 lets a **method declare its own type parameters**, so transforms live on
 `*Future[T]` and a pipeline reads left-to-right instead of inside-out.
@@ -263,7 +265,9 @@ count, err := inst.Nodes()["func:TokenCount"].Cast[TokenCount]().Get()
 
 ### Package-level transforms (all Go versions)
 
-These are the original API and the only form available on Go 1.18–1.26. They are **not** deprecated, and they do not delegate to the methods above: each variant carries its own implementation so that the Go 1.18 build has no dependency on a file that may be excluded from it.
+These are the original API and, on Go 1.18–1.26, the only form available. They are **not** deprecated, and they do not delegate to the methods above: each variant carries its own implementation so that the Go 1.18 build has no dependency on a file that may be excluded from it.
+
+This list is deliberately shorter than the method list: the six transforms added in v0.2.0 (`ThenGo`, `Map`, `FlatMap`, `Cast`, `Recover`, `OrElse`) were written against generic methods and exist in method form only.
 
 | Function           | Method form (Go 1.27+) |
 | ------------------ | ---------------------- |
@@ -294,11 +298,18 @@ vals, _ := fAll.Get() // [1, 2]
 
 Returns the first successful result. If all fail, returns the first error.
 
+The Future `AnyOf` returns never fails itself: both outcomes arrive inside the `AnyResult`, so read `res.Err` rather than the Future's error. That follows from the return type — `*Future[AnyResult[T]]` has a field to carry the error, so failing the Future as well would say the same thing twice. `AllOf` returns `*Future[[]T]`, which has nowhere to put one, and reports failure through the Future instead.
+
 ```go
 f1 := future.Async(func() (int, error) { return 0, fmt.Errorf("fail") })
 f2 := future.Async(func() (int, error) { return 2, nil })
+
 res, _ := future.AnyOf(f1, f2).Get()
-// res.Index == 1, res.Val == 2
+// res.Index == 1, res.Val == 2, res.Err == nil
+
+f3 := future.Async(func() (int, error) { return 0, fmt.Errorf("also fail") })
+res, _ = future.AnyOf(f1, f3).Get()
+// res.Index == 0, res.Err != nil — every input failed
 ```
 
 ---
@@ -307,13 +318,15 @@ res, _ := future.AnyOf(f1, f2).Get()
 
 Fails with `ErrTimeout` if the Future is not resolved in time.
 
+Only the wrapper fails. The Future being wrapped keeps running and still resolves on its own schedule — nothing in this package cancels it, and there is no cancellation API to reach for. A timed-out Future tells the caller to stop waiting; it does not stop work. A task that should give up once its result is no longer wanted has to watch a `context.Context` itself (see `CtxAsync`), and it stays responsible for the resources it holds.
+
 ```go
 f := future.Async(func() (int, error) {
 	time.Sleep(2 * time.Second)
 	return 42, nil
 })
 val, err := f.Timeout(time.Second).Get()
-// err == future.ErrTimeout
+// err == future.ErrTimeout; f still completes about a second later
 ```
 
 ---

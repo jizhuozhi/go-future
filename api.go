@@ -16,11 +16,21 @@ var ErrTimeout = errors.New("future timeout")
 // asserted to the requested type.
 var ErrTypeMismatch = errors.New("future type mismatch")
 
+// Result pairs a value with the error that came with it, for transports that
+// cannot carry two return values. ToChan delivers one of these.
 type Result[T any] struct {
 	Val T
 	Err error
 }
 
+// AnyResult is what AnyOf reports. Index is the position of the Future the
+// result came from.
+//
+// The error of the winning Future, when there is one, travels in Err rather
+// than through the Future AnyOf returns: *Future[AnyResult[T]] already has a
+// field to carry it, so failing that Future as well would say the same thing
+// twice. AllOf is the other way round — *Future[[]T] has nowhere to put an
+// error, so it reports failure through the Future instead.
 type AnyResult[T any] struct {
 	Index int
 	Val   T
@@ -77,6 +87,12 @@ func Done2[T any](val T, err error) *Future[T] {
 	return &Future[T]{state: s}
 }
 
+// AnyOf returns the first Future to succeed, or, if every one of them fails,
+// the failure of the first to do so.
+//
+// The Future AnyOf returns never fails: both outcomes arrive inside the
+// AnyResult, so check res.Err rather than the Future's error. AnyResult
+// explains why.
 func AnyOf[T any](fs ...*Future[T]) *Future[AnyResult[T]] {
 	if len(fs) == 0 {
 		return Done(AnyResult[T]{Index: -1})
@@ -186,6 +202,12 @@ func ToChan[T any](f *Future[T]) <-chan Result[T] {
 
 // Timeout wraps f so that it fails with ErrTimeout when it is not resolved
 // within d.
+//
+// Only the wrapper fails. There is no cancellation anywhere in this package, so
+// f keeps running and still resolves on its own schedule: a timed-out Future
+// tells the caller to stop waiting, it does not stop the work. A task that
+// should give up once its result is no longer wanted has to watch a context
+// itself (see CtxAsync), and it stays responsible for the resources it holds.
 func Timeout[T any](f *Future[T], d time.Duration) *Future[T] {
 	var done uint32
 	s := &state[T]{}
