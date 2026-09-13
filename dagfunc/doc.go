@@ -15,6 +15,19 @@
 //	_, _ = prog.Run(ctx)
 //	ans, _ := prog.Value[Answer]()
 //
+// # Stability
+//
+// dagfunc is experimental, and it is expected to stay that way.
+//
+// It is a functional DSL layered over dagcore, and we have not found a way to
+// express that DSL with semantics that align exactly with the model underneath.
+// Until we do, its API may change in a minor release without a deprecation
+// cycle, and it is not covered by the stability the rest of this module offers.
+// dagcore, which this package is built on, is a long-term stable API.
+//
+// If dagfunc covers what you need, forking it is a reasonable choice: the layer
+// underneath is stable, so a fork has a fixed foundation.
+//
 // # Node ids
 //
 // Every node has a string id, used by NodeByID, by Wrap and by dagviz. The
