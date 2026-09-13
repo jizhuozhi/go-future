@@ -90,6 +90,11 @@ func Done2[T any](val T, err error) *Future[T] {
 // AnyOf returns the first Future to succeed, or, if every one of them fails,
 // the failure of the first to do so.
 //
+// Failure does not short-circuit. The all-failed outcome only becomes available
+// once every input has failed, so one Future that never resolves keeps AnyOf
+// pending even after the others have failed. A success, by contrast, settles the
+// result immediately.
+//
 // The Future AnyOf returns never fails: both outcomes arrive inside the
 // AnyResult, so check res.Err rather than the Future's error. AnyResult
 // explains why.

@@ -319,6 +319,8 @@ vals, _ := fAll.Get() // [1, 2]
 
 Returns the first successful result. If all fail, returns the first error.
 
+Failure does not short-circuit: the all-failed outcome only becomes available once every input has failed, so one Future that never resolves keeps `AnyOf` pending even after the others have failed. A success settles the result immediately.
+
 The Future `AnyOf` returns never fails itself: both outcomes arrive inside the `AnyResult`, so read `res.Err` rather than the Future's error. That follows from the return type — `*Future[AnyResult[T]]` has a field to carry the error, so failing the Future as well would say the same thing twice. `AllOf` returns `*Future[[]T]`, which has nowhere to put one, and reports failure through the Future instead.
 
 ```go
@@ -402,14 +404,20 @@ Benchmark/Channel           3.00M	    399 ns/op
 
 ---
 
-# 📦 DAG Execution Engine (Experimental)
+# 📦 DAG Execution Engine
 
-Starting from v0.1.4, `go-future` introduces a powerful **DAG (Directed Acyclic Graph) execution engine**, consisting of:
+Starting from v0.1.4, `go-future` includes a **DAG (Directed Acyclic Graph) execution engine**, consisting of:
 
-* `dagcore`: A minimal parallel DAG scheduler with lock-free dependency tracking
-* `dagfunc`: A high-level builder that constructs DAGs using Go function signatures with type-based dependency resolution
+* `dagcore` — **stable**: a minimal parallel DAG scheduler with lock-free dependency tracking
+* `dagfunc` — **experimental**: a high-level builder that constructs DAGs using Go function signatures with type-based dependency resolution
 
 This enables users to describe complex data flow graphs declaratively with automatic dependency wiring and parallel execution.
+
+## Stability
+
+`dagcore` is a long-term stable API, covered by the same stability as the rest of this module.
+
+`dagfunc` is experimental, and it is expected to stay that way. It is a functional DSL layered over `dagcore`, and we have not found a way to express that DSL with semantics that align exactly with the model underneath. Until we do, its API may change in a minor release without a deprecation cycle, and it is not covered by the module's stability promise. If `dagfunc` covers what you need, forking it is a reasonable choice — the layer underneath is stable, so a fork has a fixed foundation.
 
 ## dagcore
 
