@@ -33,17 +33,23 @@ type Promise[T any] struct {
 	state state[T]
 }
 
-// Future The Future provides a mechanism to access the result of asynchronous operations:
+// Future is the consumer side of an asynchronous operation. It gives the caller
+// of that operation access to its result:
 //
-// 1. An asynchronous operation (Async and Promise) can provide a Future to the creator of that asynchronous operation.
+//  1. An asynchronous operation (Async, CtxAsync or a Promise) hands a Future to
+//     its caller.
 //
-// 2. The creator of the asynchronous operation can then use a variety of methods to query, wait for, or extract a value from the Future.
-// These methods may block if the asynchronous operation has not yet provided a value.
+//  2. The caller can then query it with Done, wait for it with Get or Await, or
+//     read it with a fallback via GetOrDefault. Get blocks while the result is
+//     not ready yet.
 //
-// 3. When the asynchronous operation is ready to send a result to the creator, it can do so by modifying shared state (e.g. Promise.Set)
-// that is linked to the creator's std::future.
+//  3. When the operation produces its result it publishes it through the
+//     associated Promise — or, for Async, through the internal state the
+//     executor completes. Every goroutine parked in Get wakes up, and every
+//     callback registered with Subscribe runs.
 //
-// The Future also has the ability to register a callback to be called when the asynchronous operation is ready to send a result to the creator.
+// Subscribe registers a callback as an alternative to blocking in Get; see its
+// documentation for the goroutine the callback runs on.
 type Future[T any] struct {
 	state *state[T]
 }
