@@ -3,7 +3,7 @@
 [![codecov](https://codecov.io/github/jizhuozhi/go-future/graph/badge.svg?token=9UZDVRZCQM)](https://codecov.io/github/jizhuozhi/go-future)
 [![goreport](https://goreportcard.com/badge/github.com/jizhuozhi/go-future)](https://goreportcard.com/badge/github.com/jizhuozhi/go-future)
 
-**go-future** is a lightweight, high-performance, lock-free Future/Promise implementation for Go, built with modern concurrency in mind. It supports:
+**go-future** is a lightweight, high-performance, mutex-free Future/Promise implementation for Go, built with modern concurrency in mind. It supports:
 
 - Asynchronous task execution (`Async`, `CtxAsync`)
 - Promise resolution (`Promise`)
@@ -139,7 +139,28 @@ func main() {
 * `Promise` is the **producer**, which sets the value once.
 * `Future` is the **consumer**, which retrieves the result asynchronously.
 
-Every Future is backed by a lock-free internal state. All state transitions are safe and efficient under high concurrency.
+Every Future is backed by a single atomic word: each state transition is one compare-and-swap on that word, and waiters park on a semaphore. No mutex is taken on any path.
+
+### Why a semaphore, not `sync.Cond`
+
+`Get` parks a goroutine until the result is published. The textbook tool for that is a `sync.Cond`, but a `Cond` needs a `Locker`: waiting means unlocking, parking and locking again. `sync.Mutex` is adaptive — it spins, then backs off, then parks on a semaphore of its own — and that escalation pays for itself only when the critical section is short. An asynchronous task is a heavy operation, so the wait is long by nature and the mutex machinery would be overhead spent for nothing.
+
+`go-future` therefore skips the mutex and drives the semaphore directly, keeping only the part a condition variable is actually needed for here: a queue of parked goroutines for `Set` to hand off to. There is no spin phase and no lock upgrade on the wait path.
+
+The cost is that the semaphore is reached through `//go:linkname` rather than the public API. The Go source is candid about this — `runtime/sema.go` publishes both symbols with an explicit `//go:linkname` push and carries this note:
+
+```text
+sync_runtime_Semacquire should be an internal detail,
+but widely used packages access it using linkname.
+Notable members of the hall of shame include:
+  - gvisor.dev/gvisor
+  - github.com/sagernet/gvisor
+
+Do not remove or change the type signature.
+See go.dev/issue/67401.
+```
+
+The push makes this the handshake form rsc describes as the desired end state in [go.dev/issue/67401](https://go.dev/issue/67401), rather than an unauthorised pull, and "Do not remove or change the type signature" is a commitment the Go team has made. The note also records who else depends on it: gvisor.
 
 ---
 
@@ -346,7 +367,7 @@ f.Subscribe(func(v int, err error) {
 
 ## ✅ Advantages
 
-* **Zero Locking:** Internals are implemented using atomic state machines, not `sync.Mutex`.
+* **Mutex-free:** Every state transition is a compare-and-swap on a single atomic word, and waiters park on a semaphore. No lock is taken on any path.
 * **Type Safe:** Full support for Go generics.
 * **No Goroutine Bloat:** Except `Async`, all operations are event-driven, avoiding extra goroutines.
 * **Composable:** Easily chainable, supports DAG-like workflows.
@@ -372,18 +393,18 @@ Benchmark/Channel           3.00M	    399 ns/op
 
 Starting from v0.1.4, `go-future` introduces a powerful **DAG (Directed Acyclic Graph) execution engine**, consisting of:
 
-* `dagcore`: A minimal, lock-free parallel DAG scheduler
+* `dagcore`: A minimal parallel DAG scheduler with lock-free dependency tracking
 * `dagfunc`: A high-level builder that constructs DAGs using Go function signatures with type-based dependency resolution
 
 This enables users to describe complex data flow graphs declaratively with automatic dependency wiring and parallel execution.
 
 ## dagcore
 
-`dagcore` is the low-level DAG execution engine powering [`go-future`](https://github.com/jizhuozhi/go-future)'s structured concurrency and dataflow execution model. It provides a lock-free, dependency-driven scheduler for executing static DAGs (Directed Acyclic Graphs) in parallel.
+`dagcore` is the low-level DAG execution engine powering [`go-future`](https://github.com/jizhuozhi/go-future)'s structured concurrency and dataflow execution model. It provides a dependency-driven scheduler with lock-free dependency tracking for executing static DAGs (Directed Acyclic Graphs) in parallel.
 
 ### ✨ Features
 
-* ⚡ **Lock-free execution** via atomic dependency counters
+* ⚡ **Lock-free scheduling** via atomic dependency counters
 * ⛓️ **Supports any static DAG with arbitrary fan-in/out structure**
 * 🔁 **Exactly-once execution**: each node runs exactly once after its dependencies complete
 * 🧠 **On-demand scheduling**: nodes are only triggered once all dependencies complete — goroutines are created only when the node is ready to run

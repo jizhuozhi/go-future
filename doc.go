@@ -1,14 +1,49 @@
-// Package future provides a lightweight, lock-free Future/Promise implementation
-// for Go.
+// Package future provides a lightweight, mutex-free Future/Promise
+// implementation for Go.
 //
 // A Promise is the producer side, a Future is the consumer side. Both are backed
-// by a lock-free state machine: every transition is driven by atomic operations
-// and a semaphore, so waiting never holds a mutex and completing a Future runs
-// its callbacks on the completing goroutine instead of spawning new ones.
+// by a single atomic word: every state transition is one compare-and-swap on
+// that word, and waiters park on a semaphore. No mutex is taken on any path, and
+// completing a Future runs its callbacks on the completing goroutine instead of
+// spawning new ones.
 //
 //	p := future.NewPromise[string]()
 //	go func() { p.Set("hello", nil) }()
 //	val, err := p.Future().Get()
+//
+// # Waiting: a semaphore, not sync.Cond
+//
+// Get parks a goroutine until the result is published. The textbook tool for
+// that is a sync.Cond, but a Cond needs a Locker: waiting means unlocking,
+// parking and locking again. A sync.Mutex is adaptive — it spins, then backs
+// off, then parks on a semaphore of its own — and that escalation pays for
+// itself only when the critical section is short. An asynchronous task is a
+// heavy operation, so the wait here is long by nature and the mutex machinery
+// would be overhead spent for nothing.
+//
+// This package therefore skips the mutex and drives the semaphore directly,
+// keeping only the part a condition variable is actually needed for here: a
+// queue of parked goroutines for Set to hand off to. There is no spin phase and
+// no lock upgrade on the wait path.
+//
+// The cost is that the semaphore is reached through //go:linkname rather than
+// through the public API. The Go source is candid about this: runtime/sema.go
+// publishes both symbols with an explicit //go:linkname push and carries this
+// note —
+//
+//	sync_runtime_Semacquire should be an internal detail,
+//	but widely used packages access it using linkname.
+//	Notable members of the hall of shame include:
+//	  - gvisor.dev/gvisor
+//	  - github.com/sagernet/gvisor
+//
+//	Do not remove or change the type signature.
+//	See go.dev/issue/67401.
+//
+// The push makes this the handshake form rsc describes as the desired end state
+// in go.dev/issue/67401, rather than an unauthorised pull, and "Do not remove or
+// change the type signature" is a commitment the Go team has made. The note also
+// records who else depends on it: gvisor. See linkname.go.
 //
 // # API layering
 //

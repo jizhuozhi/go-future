@@ -28,11 +28,11 @@ type AnyResult[T any] struct {
 }
 
 func Async[T any](f func() (T, error)) *Future[T] {
-	return Submit(executor, f)
+	return Submit(currentExecutor(), f)
 }
 
 func CtxAsync[T any](ctx context.Context, f func(ctx context.Context) (T, error)) *Future[T] {
-	return CtxSubmit(ctx, executor, f)
+	return CtxSubmit(ctx, currentExecutor(), f)
 }
 
 func Submit[T any](e Executor, f func() (T, error)) *Future[T] {
