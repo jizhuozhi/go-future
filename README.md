@@ -147,7 +147,20 @@ Every Future is backed by a single atomic word: each state transition is one com
 
 `go-future` therefore skips the mutex and drives the semaphore directly, keeping only the part a condition variable is actually needed for here: a queue of parked goroutines for `Set` to hand off to. There is no spin phase and no lock upgrade on the wait path.
 
-The cost is that the semaphore is reached through `//go:linkname` rather than the public API. These are the same primitives `sync.Mutex` and `sync.WaitGroup` are built on and their signatures have been stable for many releases, but they are not covered by the Go 1 compatibility promise.
+The cost is that the semaphore is reached through `//go:linkname` rather than the public API. The Go source is candid about this — `runtime/sema.go` publishes both symbols with an explicit `//go:linkname` push and carries this note:
+
+```text
+sync_runtime_Semacquire should be an internal detail,
+but widely used packages access it using linkname.
+Notable members of the hall of shame include:
+  - gvisor.dev/gvisor
+  - github.com/sagernet/gvisor
+
+Do not remove or change the type signature.
+See go.dev/issue/67401.
+```
+
+The push makes this the handshake form rsc describes as the desired end state in [go.dev/issue/67401](https://go.dev/issue/67401), rather than an unauthorised pull, and "Do not remove or change the type signature" is a commitment the Go team has made. The note also records who else depends on it: gvisor.
 
 ---
 

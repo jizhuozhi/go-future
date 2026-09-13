@@ -27,10 +27,23 @@
 // no lock upgrade on the wait path.
 //
 // The cost is that the semaphore is reached through //go:linkname rather than
-// through the public API. These are the same primitives sync.Mutex and
-// sync.WaitGroup are built on and their signatures have been stable for many
-// releases, but they are not covered by the Go 1 compatibility promise. See
-// linkname.go.
+// through the public API. The Go source is candid about this: runtime/sema.go
+// publishes both symbols with an explicit //go:linkname push and carries this
+// note —
+//
+//	sync_runtime_Semacquire should be an internal detail,
+//	but widely used packages access it using linkname.
+//	Notable members of the hall of shame include:
+//	  - gvisor.dev/gvisor
+//	  - github.com/sagernet/gvisor
+//
+//	Do not remove or change the type signature.
+//	See go.dev/issue/67401.
+//
+// The push makes this the handshake form rsc describes as the desired end state
+// in go.dev/issue/67401, rather than an unauthorised pull, and "Do not remove or
+// change the type signature" is a commitment the Go team has made. The note also
+// records who else depends on it: gvisor. See linkname.go.
 //
 // # API layering
 //
