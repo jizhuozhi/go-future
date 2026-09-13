@@ -21,11 +21,15 @@
 //
 // A transform that changes the result type has to introduce a type parameter of
 // its own. That was impossible for methods until Go 1.27 added generic methods,
-// which is why these transforms originally lived at package scope only.
+// which is why the earlier transforms were written as package-level
+// functions taking the Future as their first argument.
 //
-// Both forms are now available. The methods are the expressive, chainable form;
-// the package-level functions are the original API and remain fully supported,
-// not deprecated. They are independent implementations rather than shims, see
+// Both forms are available for those transforms: the methods are the
+// expressive, chainable form, the package-level functions are the original API
+// and remain fully supported, not deprecated. The six transforms added in
+// v0.2.0 (ThenGo, Map, FlatMap, Cast, Recover, OrElse) were written against
+// generic methods and exist in method form only, so they need Go 1.27.
+// They are independent implementations rather than shims, see
 // "Build tags" below.
 //
 // A combinator over several Futures has no single receiver, so it stays a
