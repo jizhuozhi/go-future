@@ -165,6 +165,9 @@ func (f *Future[T]) ToChan() <-chan Result[T] {
 
 // Timeout wraps f so that it fails with ErrTimeout when it is not resolved
 // within d.
+//
+// Only the wrapper fails: f keeps running, because nothing in this package can
+// cancel it. See the package-level Timeout for the full note.
 func (f *Future[T]) Timeout(d time.Duration) *Future[T] {
 	var done uint32
 	s := &state[T]{}
