@@ -16,6 +16,30 @@ var (
 	errDefect    = errors.New("model and feature id spaces differ")
 )
 
+// Test-side atomics, written against the untyped functions on purpose.
+//
+// The typed values (atomic.Bool, atomic.Int32) only arrived in Go 1.19, while
+// this module declares go 1.18 and CI builds it against that release, where
+// they do not exist at all. The untyped functions have been available since Go
+// 1.0. Method names mirror the typed versions so the call sites read the same
+// either way.
+type atomicFlag struct{ v int32 }
+
+func (f *atomicFlag) Store(v bool) {
+	var n int32
+	if v {
+		n = 1
+	}
+	atomic.StoreInt32(&f.v, n)
+}
+
+func (f *atomicFlag) Load() bool { return atomic.LoadInt32(&f.v) != 0 }
+
+type atomicCounter struct{ v int32 }
+
+func (c *atomicCounter) Add(delta int32) { atomic.AddInt32(&c.v, delta) }
+func (c *atomicCounter) Load() int32     { return atomic.LoadInt32(&c.v) }
+
 // WithSkipFunc and WithRecoverFunc must stay independent.
 //
 // A skip is a planned decision; a recovered failure is an incident. Binding
@@ -214,7 +238,7 @@ func TestDAG_DeclinedRecoveryMayAnnotate(t *testing.T) {
 // skipping costs no downstream resources, and leaves no near-zero sample behind
 // in the latency distribution.
 func TestDAG_SkipDoesNotInvokeNodeFunc(t *testing.T) {
-	var called atomic.Bool
+	var called atomicFlag
 
 	d := NewDAG()
 	assert.NoError(t, d.AddNode("N", nil, func(context.Context, map[NodeID]any) (any, error) {
@@ -275,7 +299,7 @@ func TestDAG_SkipValueMayDependOnReason(t *testing.T) {
 // This is a boundary rather than a defect: skipping is not error handling. To
 // tolerate an upstream failure, give the upstream node a WithRecoverFunc.
 func TestDAG_SkipCannotObserveFailedDependency(t *testing.T) {
-	var predicateCalled atomic.Bool
+	var predicateCalled atomicFlag
 
 	d := NewDAG()
 	assert.NoError(t, d.AddNode("upstream", nil, func(context.Context, map[NodeID]any) (any, error) {
@@ -351,7 +375,7 @@ func TestDAG_ErrIsNilOnSuccess(t *testing.T) {
 
 // The handler is only called on failure; the success path is unaffected.
 func TestDAG_RecoverNotCalledOnSuccess(t *testing.T) {
-	var called atomic.Int32
+	var called atomicCounter
 
 	d := NewDAG()
 	assert.NoError(t, d.AddNode("N", nil, func(context.Context, map[NodeID]any) (any, error) {
@@ -385,7 +409,7 @@ func TestDAG_RecoverNotCalledOnSuccess(t *testing.T) {
 func TestDAG_RecoveryDoesNotSeePanics(t *testing.T) {
 	const boom = "assignment to entry in nil map"
 
-	var called atomic.Int32
+	var called atomicCounter
 
 	d := NewDAG()
 	assert.NoError(t, d.AddNode("N", nil, func(context.Context, map[NodeID]any) (any, error) {
