@@ -335,28 +335,15 @@ func (n *NodeInstance) Skipped() bool               { return n.skipped }
 // Recovered reports whether the node failed and a WithRecoverFunc handler
 // replaced the error with a value.
 //
-// It is the third state alongside Skipped and Err, and it cannot be derived
-// from the other two. Err is populated both when a handler recovers and when
-// it declines, and a declining handler may rewrite the error before it fails
-// the run, so neither the node's error nor the run result identifies on its own
-// whether a given failure was absorbed.
-//
-// This is the flag to count degradations with. A recovered failure does not
-// appear in the error returned by DAGInstance.Run and does not appear in any
-// aggregate error rate, yet it means the caller was served with a worse answer
-// than a successful node would have produced.
-//
-// Returns false for nodes that succeeded, were skipped, or were never run.
+// This is the flag to count degradations with: a recovered failure appears in
+// neither the error from Run nor any error rate. It cannot be derived from Err,
+// which stays populated both when a handler recovers and when it declines.
 func (n *NodeInstance) Recovered() bool { return n.recovered }
 
-// Err returns the error the node function returned.
-//
-// It holds the error the node function returned, never one substituted by a
-// WithRecoverFunc handler, and it is populated even when that error was
-// recovered. Pair it with Recovered to tell the two cases apart: Err alone
-// cannot, because a declining handler also leaves it populated.
-//
-// Returns nil for nodes that succeeded, were skipped, or never ran.
+// Err returns the error the node function returned, never one substituted by a
+// WithRecoverFunc handler. Pair it with Recovered: Err alone cannot separate a
+// recovered failure from a propagated one. Nil for nodes that succeeded, were
+// skipped, or never ran.
 func (n *NodeInstance) Err() error { return n.err }
 
 // DAGInstance is the per-execution runtime of a DAG
@@ -492,92 +479,39 @@ func (d *DAGInstance) Nodes() map[NodeID]*NodeInstance {
 	return d.nodes
 }
 
-// WithSkipFunc registers a skip predicate for a node.
+// WithSkipFunc registers a skip predicate, evaluated after dependencies are
+// resolved and before the node function runs:
 //
-// The predicate runs after the node's dependencies have been collected and
-// before the node function is invoked:
+//	return true, value  // publish value downstream without running the node
+//	return false, nil   // run the node; the value is ignored
 //
-//	return true, value  // skip the node and publish value to downstream nodes
-//	return false, nil   // run the node normally; the value is ignored
-//
-// The value returned alongside false is ignored, so the normal path does not
-// need to produce one.
-//
-// Skipping and error recovery are independent. This option alone does not make
-// a node tolerant of failure: a skipped node publishes a value, but if the node
-// does run and fails, the error still fails the whole run. Combine it with
-// WithRecoverFunc to recover failures as well.
-//
-// That separation matters because the two mean different things. A skip is a
-// planned decision ("this model is irrelevant for this request", "the remaining
-// budget is not worth spending"), whereas a recovered failure is an incident.
-// Keeping them apart is what allows the two to be counted separately; folding
-// them together makes either the failure rate noisy or the alerts useless.
-//
-// The predicate receives the execution context and the resolved dependencies,
-// so it may depend on either: an experiment assignment, the remaining budget,
-// or an upstream value. It cannot observe a failed dependency. If any
-// dependency fails, the node is never scheduled and the predicate is never
-// called; to tolerate an upstream failure, give the upstream node a
-// WithRecoverFunc instead.
-//
-// A skipped node never runs, so its Duration carries no statistical meaning for
-// latency aggregation. Filter on NodeInstance.Skipped before aggregating,
-// otherwise the near-zero samples will drag percentiles down and hide the real
-// distribution.
-//
-// The published value must match the type downstream nodes assert on. An
-// untyped nil will make `deps[id].(T)` panic downstream; return a typed zero
-// value instead (e.g. (*T)(nil), []T(nil)).
+// Skipping is not error recovery: a node that runs and fails still fails the
+// run, so pair this with WithRecoverFunc when both are wanted. The published
+// value must be typed, and a skipped node never ran — filter on
+// NodeInstance.Skipped before aggregating Duration.
 func WithSkipFunc(fn func(ctx context.Context, deps map[NodeID]any) (bool, any)) NodeOpt {
 	return func(n *NodeSpec) {
 		n.skipFunc = fn
 	}
 }
 
-// WithRecoverFunc registers an error handler that decides, per failure,
-// whether a node's error is recoverable.
-//
-// When the node function returns an error, the handler is called with it:
+// WithRecoverFunc registers a handler that decides, per failure, whether the
+// node's error is recoverable:
 //
 //	return value, nil   // recover: publish value, keep scheduling downstream
-//	return nil, err     // do not recover: the error fails the run
-//	return nil, wrap    // do not recover, adding context first
+//	return nil, err     // propagate: the error fails the run
+//	return nil, wrap    // propagate, adding context first
 //
-// Recovering has to be an explicit decision per failure. Not every error
-// deserves recovery: a timeout or a transient backend error is usually worth
-// degrading over, whereas a malformed request, an unknown feature field, or a
-// model/feature id space mismatch is a defect that recovering would only paper
-// over. Recovering unconditionally is the easy mistake here; write the
-// propagate branch first and recover only the cases you have actually reasoned
-// about.
+// Write the propagate branch first — only errors you have reasoned about are
+// worth degrading over. A recovered failure is invisible to Run's error and to
+// any error rate, so count it via NodeInstance.Recovered.
 //
-// This option is what makes a node optional. A node whose failure must fail the
-// whole run simply omits it.
+// A panic never reaches the handler: future.CtxAsync converts it into an
+// ErrPanic error outside this closure, so the unwind skips it. The published
+// value must be typed; an untyped nil panics the downstream `deps[id].(T)`.
 //
-// Recovery hides a failure in two places, the error returned by DAGInstance.Run
-// and any aggregate error rate, so it has to be counted explicitly:
-// NodeInstance.Recovered reports it, and NodeInstance.Err still holds the error
-// the node function returned. Count them and alert on them; a recovery means
-// the caller was served with a worse answer than a successful node would have
-// produced.
-//
-// A panic does not arrive here. The node closure runs inside future.CtxAsync,
-// which catches a panic with a deferred recover and turns it into an error
-// wrapping ErrPanic with the stack attached — but that recover sits outside
-// this closure, so unwinding skips the error branch below and the handler is
-// never called. A panicking node therefore fails the run even when it is
-// marked optional; NodeInstance.Recovered stays false, and NodeInstance.Err
-// stays nil because the assignment to it is skipped as well.
-//
-// Whether that boundary is intended or an accident of where the recover sits
-// deserves to be settled explicitly. If a panicking node ought to be
-// tolerable, the conversion has to move inside this closure so that ErrPanic
-// flows through the error branch like any other failure.
-//
-// The value published when recovering must match the type downstream nodes
-// assert on. An untyped nil will make `deps[id].(T)` panic downstream; return a
-// typed zero value instead (e.g. (*T)(nil), []T(nil)).
+// The published value must be typed — an untyped nil panics the downstream
+// `deps[id].(T)`.
 func WithRecoverFunc(fn func(ctx context.Context, deps map[NodeID]any, err error) (any, error)) NodeOpt {
 	return func(n *NodeSpec) {
 		n.recoverFunc = fn

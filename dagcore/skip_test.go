@@ -16,13 +16,8 @@ var (
 	errDefect    = errors.New("model and feature id spaces differ")
 )
 
-// Test-side atomics, written against the untyped functions on purpose.
-//
-// The typed values (atomic.Bool, atomic.Int32) only arrived in Go 1.19, while
-// this module declares go 1.18 and CI builds it against that release, where
-// they do not exist at all. The untyped functions have been available since Go
-// 1.0. Method names mirror the typed versions so the call sites read the same
-// either way.
+// Test-side atomics over the untyped functions: atomic.Bool and atomic.Int32
+// are Go 1.19, while this module declares go 1.18 and is built against it.
 type atomicFlag struct{ v int32 }
 
 func (f *atomicFlag) Store(v bool) {
@@ -40,13 +35,9 @@ type atomicCounter struct{ v int32 }
 func (c *atomicCounter) Add(delta int32) { atomic.AddInt32(&c.v, delta) }
 func (c *atomicCounter) Load() int32     { return atomic.LoadInt32(&c.v) }
 
-// WithSkipFunc and WithRecoverFunc must stay independent.
-//
-// A skip is a planned decision; a recovered failure is an incident. Binding
-// both onto a single callback makes it impossible to express "this node may be
-// skipped, but if it actually runs and fails, the whole run must fail". The
-// subtler problem with binding them is that the caller rarely notices it has
-// switched on error swallowing at the same time.
+// WithSkipFunc and WithRecoverFunc stay independent: one callback for both
+// makes "may be skipped, but a real failure must fail the run" inexpressible,
+// and silently switches on error swallowing.
 func TestDAG_SkipAndRecoveryAreIndependent(t *testing.T) {
 	failing := func(context.Context, map[NodeID]any) (any, error) { return nil, errFoo }
 
@@ -187,12 +178,8 @@ func TestDAG_RecoveryMayDecline(t *testing.T) {
 	assert.ErrorIs(t, inst.nodes["N"].Err(), errFoo)
 }
 
-// The point of passing the error to the handler: recovering one class of error
-// while propagating another.
-//
-// A timeout or a transient backend error is worth degrading over; a schema
-// mismatch or an undefined feature field is a defect that a fallback would only
-// paper over.
+// The point of passing the error in: recover one class of error, propagate
+// another.
 func TestDAG_RecoveryIsSelective(t *testing.T) {
 	handler := WithRecoverFunc(func(_ context.Context, _ map[NodeID]any, err error) (any, error) {
 		if errors.Is(err, errTransient) {
@@ -232,11 +219,8 @@ func TestDAG_DeclinedRecoveryMayAnnotate(t *testing.T) {
 	assert.NotContains(t, inst.nodes["N"].Err().Error(), "declined to recover")
 }
 
-// A skipped node's function is never invoked.
-//
-// That is what separates skipping from "run it and return a fallback value":
-// skipping costs no downstream resources, and leaves no near-zero sample behind
-// in the latency distribution.
+// A skipped node's function never runs, so it costs no downstream resources and
+// leaves no near-zero sample in the latency distribution.
 func TestDAG_SkipDoesNotInvokeNodeFunc(t *testing.T) {
 	var called atomicFlag
 
@@ -295,9 +279,8 @@ func TestDAG_SkipValueMayDependOnReason(t *testing.T) {
 }
 
 // A failed dependency short-circuits before the skip predicate is consulted.
-//
-// This is a boundary rather than a defect: skipping is not error handling. To
-// tolerate an upstream failure, give the upstream node a WithRecoverFunc.
+// Skipping is not error handling; to tolerate an upstream failure, give the
+// upstream node a WithRecoverFunc.
 func TestDAG_SkipCannotObserveFailedDependency(t *testing.T) {
 	var predicateCalled atomicFlag
 
@@ -323,10 +306,8 @@ func TestDAG_SkipCannotObserveFailedDependency(t *testing.T) {
 			"give the upstream node a WithRecoverFunc to tolerate its failure instead")
 }
 
-// Once an upstream failure has been recovered, the downstream predicate does
-// run. This is the intended combination for "keep the graph alive with a
-// recovery, then let the downstream node decide whether it is still worth
-// executing".
+// A recovered upstream failure lets the downstream predicate run, so it can
+// decide whether the node is still worth executing.
 func TestDAG_RecoveredDependencyLetsDownstreamDecide(t *testing.T) {
 	d := NewDAG()
 	assert.NoError(t, d.AddNode("upstream", nil, func(context.Context, map[NodeID]any) (any, error) {
@@ -395,17 +376,10 @@ func TestDAG_RecoverNotCalledOnSuccess(t *testing.T) {
 	assert.Zero(t, called.Load())
 }
 
-// A panic stops short of the handler.
-//
-// future.CtxAsync does convert it into an error wrapping ErrPanic with the
-// stack attached, but that recover sits outside the node closure, so unwinding
-// skips the error branch and the handler never runs. The consequence is worth
-// being explicit about: "this node is optional" does not currently cover
-// panics, and neither Recovered nor Err reports the failure.
-//
-// Pinned as a contract boundary, not as an implementation detail callers can
-// ignore — if a panicking node should be tolerable, this test is the thing
-// that has to change along with the code.
+// A panic stops short of the handler: future.CtxAsync converts it into an
+// ErrPanic error outside the node closure, so the unwind skips the handler and
+// the run fails with neither Recovered nor Err reporting it. An optional node
+// is therefore not panic-tolerant — change this test if that should change.
 func TestDAG_RecoveryDoesNotSeePanics(t *testing.T) {
 	const boom = "assignment to entry in nil map"
 
