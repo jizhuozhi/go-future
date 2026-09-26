@@ -39,7 +39,27 @@ type NodeSpec struct {
 	subgraph              *DAG
 	subgraphInputMapping  func(map[NodeID]any) map[NodeID]any
 	subgraphOutputMapping func(map[NodeID]any) any
+
+	// skipFunc decides whether the node should be skipped, and supplies the
+	// value to publish when it is. Returning false leaves the value unused.
+	skipFunc func(ctx context.Context, deps map[NodeID]any) (bool, any)
+
+	// recoverFunc decides, per failure, whether an execution error is
+	// recoverable. Returning a nil error recovers by publishing the returned
+	// value; returning an error propagates instead.
+	recoverFunc func(ctx context.Context, deps map[NodeID]any, err error) (any, error)
 }
+
+// evalSkip evaluates the skip predicate. A node without a predicate is never
+// skipped.
+func (s *NodeSpec) evalSkip(ctx context.Context, deps map[NodeID]any) (bool, any) {
+	if s.skipFunc == nil {
+		return false, nil
+	}
+	return s.skipFunc(ctx, deps)
+}
+
+type NodeOpt func(*NodeSpec)
 
 // DAG is the static structure definition holding node specs
 type DAG struct {
@@ -76,7 +96,7 @@ func (d *DAG) AddInput(id NodeID) error {
 // AddNode adds a new node to the DAG.
 //
 // Will return an error if the DAG is frozen.
-func (d *DAG) AddNode(id NodeID, deps []NodeID, fn NodeFunc) error {
+func (d *DAG) AddNode(id NodeID, deps []NodeID, fn NodeFunc, opts ...NodeOpt) error {
 	if d.frozen {
 		return ErrDAGFrozen
 	}
@@ -87,22 +107,28 @@ func (d *DAG) AddNode(id NodeID, deps []NodeID, fn NodeFunc) error {
 	if fn == nil {
 		return ErrDAGNodeNotRunnable
 	}
-	d.nodes[id] = &NodeSpec{
+	n := &NodeSpec{
 		id:   id,
 		deps: deps,
 		run:  fn,
 	}
+
+	for _, opt := range opts {
+		opt(n)
+	}
+
+	d.nodes[id] = n
 	return nil
 }
 
-func (d *DAG) AddSubgraph(id NodeID, deps []NodeID, subgraph *DAG, inputMapping func(map[NodeID]any) map[NodeID]any, outputMapping func(map[NodeID]any) any) error {
+func (d *DAG) AddSubgraph(id NodeID, deps []NodeID, subgraph *DAG, inputMapping func(map[NodeID]any) map[NodeID]any, outputMapping func(map[NodeID]any) any, opts ...NodeOpt) error {
 	if d.frozen {
 		return ErrDAGFrozen
 	}
 	if _, exists := d.nodes[id]; exists {
 		return ErrDAGNodeExisted
 	}
-	d.nodes[id] = &NodeSpec{
+	n := &NodeSpec{
 		id:   id,
 		deps: deps,
 		run:  nil, // delayed assignment at Instantiate time
@@ -111,6 +137,12 @@ func (d *DAG) AddSubgraph(id NodeID, deps []NodeID, subgraph *DAG, inputMapping 
 		subgraphInputMapping:  inputMapping,
 		subgraphOutputMapping: outputMapping,
 	}
+
+	for _, opt := range opts {
+		opt(n)
+	}
+
+	d.nodes[id] = n
 	return nil
 }
 
@@ -281,10 +313,13 @@ type NodeInstance struct {
 
 	subgraph *DAGInstance
 
-	pending  int32
-	future   *future.Future[any]
-	start    time.Time
-	duration time.Duration
+	pending   int32
+	future    *future.Future[any]
+	start     time.Time
+	duration  time.Duration
+	skipped   bool
+	recovered bool
+	err       error
 
 	promise *future.Promise[any]
 }
@@ -295,6 +330,21 @@ func (n *NodeInstance) Input() bool                 { return n.spec.input }
 func (n *NodeInstance) Subgraph() *DAGInstance      { return n.subgraph }
 func (n *NodeInstance) Future() *future.Future[any] { return n.future }
 func (n *NodeInstance) Duration() time.Duration     { return n.duration }
+func (n *NodeInstance) Skipped() bool               { return n.skipped }
+
+// Recovered reports whether the node failed and a WithRecoverFunc handler
+// replaced the error with a value.
+//
+// This is the flag to count degradations with: a recovered failure appears in
+// neither the error from Run nor any error rate. It cannot be derived from Err,
+// which stays populated both when a handler recovers and when it declines.
+func (n *NodeInstance) Recovered() bool { return n.recovered }
+
+// Err returns the error the node function returned, never one substituted by a
+// WithRecoverFunc handler. Pair it with Recovered: Err alone cannot separate a
+// recovered failure from a propagated one. Nil for nodes that succeeded, were
+// skipped, or never ran.
+func (n *NodeInstance) Err() error { return n.err }
 
 // DAGInstance is the per-execution runtime of a DAG
 type DAGInstance struct {
@@ -370,6 +420,8 @@ func (d *DAGInstance) schedule(ctx context.Context, id NodeID) {
 	}
 	node.start = time.Now()
 	future.CtxAsync(ctx, func(ctx context.Context) (any, error) {
+		var val any
+		var err error
 		deps := make(map[NodeID]any)
 		for _, depid := range node.spec.deps {
 			v, err := d.nodes[depid].future.Get()
@@ -379,7 +431,27 @@ func (d *DAGInstance) schedule(ctx context.Context, id NodeID) {
 			}
 			deps[depid] = v
 		}
-		val, err := run(ctx, deps)
+		if skip, skipValue := node.spec.evalSkip(ctx, deps); skip {
+			node.skipped = true
+			val = skipValue
+		} else {
+			val, err = run(ctx, deps)
+			if err != nil {
+				node.err = err
+				// Recovery is a per-failure decision. Without a handler the error
+				// propagates; with one, the handler decides whether this
+				// particular error is recoverable and may decline by returning
+				// an error of its own.
+				if node.spec.recoverFunc != nil {
+					if recovered, recoverErr := node.spec.recoverFunc(ctx, deps, err); recoverErr != nil {
+						err = recoverErr
+					} else {
+						val, err = recovered, nil
+						node.recovered = true
+					}
+				}
+			}
+		}
 		node.duration = time.Since(node.start)
 		if err != nil {
 			return nil, err
@@ -405,4 +477,43 @@ func (d *DAGInstance) Spec() *DAG {
 
 func (d *DAGInstance) Nodes() map[NodeID]*NodeInstance {
 	return d.nodes
+}
+
+// WithSkipFunc registers a skip predicate, evaluated after dependencies are
+// resolved and before the node function runs:
+//
+//	return true, value  // publish value downstream without running the node
+//	return false, nil   // run the node; the value is ignored
+//
+// Skipping is not error recovery: a node that runs and fails still fails the
+// run, so pair this with WithRecoverFunc when both are wanted. The published
+// value must be typed, and a skipped node never ran — filter on
+// NodeInstance.Skipped before aggregating Duration.
+func WithSkipFunc(fn func(ctx context.Context, deps map[NodeID]any) (bool, any)) NodeOpt {
+	return func(n *NodeSpec) {
+		n.skipFunc = fn
+	}
+}
+
+// WithRecoverFunc registers a handler that decides, per failure, whether the
+// node's error is recoverable:
+//
+//	return value, nil   // recover: publish value, keep scheduling downstream
+//	return nil, err     // propagate: the error fails the run
+//	return nil, wrap    // propagate, adding context first
+//
+// Write the propagate branch first — only errors you have reasoned about are
+// worth degrading over. A recovered failure is invisible to Run's error and to
+// any error rate, so count it via NodeInstance.Recovered.
+//
+// A panic never reaches the handler: future.CtxAsync converts it into an
+// ErrPanic error outside this closure, so the unwind skips it. The published
+// value must be typed; an untyped nil panics the downstream `deps[id].(T)`.
+//
+// The published value must be typed — an untyped nil panics the downstream
+// `deps[id].(T)`.
+func WithRecoverFunc(fn func(ctx context.Context, deps map[NodeID]any, err error) (any, error)) NodeOpt {
+	return func(n *NodeSpec) {
+		n.recoverFunc = fn
+	}
 }

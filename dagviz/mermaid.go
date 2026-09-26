@@ -32,9 +32,9 @@ func writeMermaidRecursive(b *strings.Builder, d *dagcore.DAGInstance, prefix st
 			_, _ = fmt.Fprintf(b, "%send\n", indent)
 		} else {
 			if node.Input() {
-				_, _ = fmt.Fprintf(b, "%s%s[%q]\n", indent, label, label)
+				_, _ = fmt.Fprintf(b, "%s%s[/%q/]\n", indent, label, label)
 			} else {
-				_, _ = fmt.Fprintf(b, "%s%s((%q))\n", indent, label, label)
+				_, _ = fmt.Fprintf(b, "%s%s[%q]\n", indent, label, label)
 			}
 		}
 	}
