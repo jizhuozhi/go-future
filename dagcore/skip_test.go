@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/jizhuozhi/go-future"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -15,7 +16,7 @@ var (
 	errDefect    = errors.New("model and feature id spaces differ")
 )
 
-// WithSkipFunc and WithFallbackFunc must stay independent.
+// WithSkipFunc and WithRecoverFunc must stay independent.
 //
 // A skip is a planned decision; a recovered failure is an incident. Binding
 // both onto a single callback makes it impossible to express "this node may be
@@ -32,7 +33,7 @@ func TestDAG_SkipAndRecoveryAreIndependent(t *testing.T) {
 	skipping := WithSkipFunc(func(context.Context, map[NodeID]any) (bool, any) {
 		return true, "skipped"
 	})
-	recovering := WithFallbackFunc(func(context.Context, map[NodeID]any, error) (any, error) {
+	recovering := WithRecoverFunc(func(context.Context, map[NodeID]any, error) (any, error) {
 		return "recovered", nil
 	})
 
@@ -52,6 +53,7 @@ func TestDAG_SkipAndRecoveryAreIndependent(t *testing.T) {
 		assert.ErrorIs(t, err, errFoo,
 			"configuring a skip predicate must not implicitly make a node optional")
 		assert.ErrorIs(t, inst.nodes["N"].Err(), errFoo)
+		assert.False(t, inst.nodes["N"].Recovered())
 	})
 
 	t.Run("recovery only", func(t *testing.T) {
@@ -60,6 +62,7 @@ func TestDAG_SkipAndRecoveryAreIndependent(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "recovered", res["N"])
 		assert.False(t, inst.nodes["N"].Skipped())
+		assert.True(t, inst.nodes["N"].Recovered())
 		assert.ErrorIs(t, inst.nodes["N"].Err(), errFoo,
 			"a recovered error must stay observable; it is invisible in the run result")
 	})
@@ -71,6 +74,7 @@ func TestDAG_SkipAndRecoveryAreIndependent(t *testing.T) {
 		assert.Equal(t, "skipped", res["N"],
 			"the value from the skip predicate must win; the node never ran")
 		assert.True(t, inst.nodes["N"].Skipped())
+		assert.False(t, inst.nodes["N"].Recovered())
 		assert.NoError(t, inst.nodes["N"].Err())
 	})
 
@@ -79,13 +83,55 @@ func TestDAG_SkipAndRecoveryAreIndependent(t *testing.T) {
 		res, err := inst.Run(context.Background())
 		assert.NoError(t, err)
 		assert.Equal(t, "skipped", res["N"])
+		assert.False(t, inst.nodes["N"].Recovered())
 	})
 
 	t.Run("neither: mandatory", func(t *testing.T) {
 		inst := build(t)
 		_, err := inst.Run(context.Background())
 		assert.ErrorIs(t, err, errFoo)
+		assert.False(t, inst.nodes["N"].Recovered())
 	})
+}
+
+// Recovered is the only flag that separates an absorbed failure from a
+// propagated one: both leave Err populated.
+func TestDAG_RecoveredSeparatesAbsorbedFromPropagated(t *testing.T) {
+	absorbed, res, err := runFailing(t, errFoo, WithRecoverFunc(
+		func(context.Context, map[NodeID]any, error) (any, error) { return "degraded", nil }))
+	assert.NoError(t, err)
+	assert.Equal(t, "degraded", res["N"])
+	assert.True(t, absorbed.nodes["N"].Recovered())
+	assert.ErrorIs(t, absorbed.nodes["N"].Err(), errFoo)
+
+	propagated, _, err := runFailing(t, errFoo, WithRecoverFunc(
+		func(_ context.Context, _ map[NodeID]any, err error) (any, error) { return nil, err }))
+	assert.ErrorIs(t, err, errFoo)
+	assert.False(t, propagated.nodes["N"].Recovered(),
+		"a declined error must not be reported as recovered")
+	assert.ErrorIs(t, propagated.nodes["N"].Err(), errFoo,
+		"Err is populated in both cases; it cannot tell them apart")
+}
+
+// A successful node is neither skipped nor recovered.
+func TestDAG_RecoveredIsFalseOnSuccess(t *testing.T) {
+	d := NewDAG()
+	assert.NoError(t, d.AddNode("N", nil, func(context.Context, map[NodeID]any) (any, error) {
+		return "ok", nil
+	}, WithRecoverFunc(func(context.Context, map[NodeID]any, error) (any, error) {
+		return "unused", nil
+	})))
+	assert.NoError(t, d.Freeze())
+
+	inst, err := d.Instantiate(nil)
+	assert.NoError(t, err)
+
+	res, err := inst.Run(context.Background())
+	assert.NoError(t, err)
+	assert.Equal(t, "ok", res["N"])
+	assert.False(t, inst.nodes["N"].Recovered())
+	assert.False(t, inst.nodes["N"].Skipped())
+	assert.NoError(t, inst.nodes["N"].Err())
 }
 
 // runFailing builds a single-node DAG whose node always fails with err, runs
@@ -108,7 +154,7 @@ func runFailing(t *testing.T, err error, opts ...NodeOpt) (*DAGInstance, map[Nod
 // Recovery is a per-failure decision: a handler may decline an error, and the
 // run then fails exactly as if no handler had been registered.
 func TestDAG_RecoveryMayDecline(t *testing.T) {
-	inst, _, err := runFailing(t, errFoo, WithFallbackFunc(
+	inst, _, err := runFailing(t, errFoo, WithRecoverFunc(
 		func(_ context.Context, _ map[NodeID]any, err error) (any, error) {
 			return nil, err
 		}))
@@ -124,7 +170,7 @@ func TestDAG_RecoveryMayDecline(t *testing.T) {
 // mismatch or an undefined feature field is a defect that a fallback would only
 // paper over.
 func TestDAG_RecoveryIsSelective(t *testing.T) {
-	handler := WithFallbackFunc(func(_ context.Context, _ map[NodeID]any, err error) (any, error) {
+	handler := WithRecoverFunc(func(_ context.Context, _ map[NodeID]any, err error) (any, error) {
 		if errors.Is(err, errTransient) {
 			return "degraded", nil
 		}
@@ -148,7 +194,7 @@ func TestDAG_RecoveryIsSelective(t *testing.T) {
 // A declining handler may add context to the error. That annotated error is
 // what fails the run, while Err keeps the error the node function returned.
 func TestDAG_DeclinedRecoveryMayAnnotate(t *testing.T) {
-	inst, _, err := runFailing(t, errFoo, WithFallbackFunc(
+	inst, _, err := runFailing(t, errFoo, WithRecoverFunc(
 		func(_ context.Context, _ map[NodeID]any, err error) (any, error) {
 			return nil, fmt.Errorf("node N declined to recover: %w", err)
 		}))
@@ -227,7 +273,7 @@ func TestDAG_SkipValueMayDependOnReason(t *testing.T) {
 // A failed dependency short-circuits before the skip predicate is consulted.
 //
 // This is a boundary rather than a defect: skipping is not error handling. To
-// tolerate an upstream failure, give the upstream node a WithFallbackFunc.
+// tolerate an upstream failure, give the upstream node a WithRecoverFunc.
 func TestDAG_SkipCannotObserveFailedDependency(t *testing.T) {
 	var predicateCalled atomic.Bool
 
@@ -250,7 +296,7 @@ func TestDAG_SkipCannotObserveFailedDependency(t *testing.T) {
 	assert.ErrorIs(t, err, errFoo)
 	assert.False(t, predicateCalled.Load(),
 		"a skip predicate must not be consulted when a dependency failed; "+
-			"give the upstream node a WithFallbackFunc to tolerate its failure instead")
+			"give the upstream node a WithRecoverFunc to tolerate its failure instead")
 }
 
 // Once an upstream failure has been recovered, the downstream predicate does
@@ -261,7 +307,7 @@ func TestDAG_RecoveredDependencyLetsDownstreamDecide(t *testing.T) {
 	d := NewDAG()
 	assert.NoError(t, d.AddNode("upstream", nil, func(context.Context, map[NodeID]any) (any, error) {
 		return nil, errFoo
-	}, WithFallbackFunc(func(context.Context, map[NodeID]any, error) (any, error) {
+	}, WithRecoverFunc(func(context.Context, map[NodeID]any, error) (any, error) {
 		return -1, nil
 	})))
 	assert.NoError(t, d.AddNode("downstream", []NodeID{"upstream"}, func(context.Context, map[NodeID]any) (any, error) {
@@ -288,7 +334,7 @@ func TestDAG_ErrIsNilOnSuccess(t *testing.T) {
 	d := NewDAG()
 	assert.NoError(t, d.AddNode("N", nil, func(context.Context, map[NodeID]any) (any, error) {
 		return "ok", nil
-	}, WithFallbackFunc(func(context.Context, map[NodeID]any, error) (any, error) {
+	}, WithRecoverFunc(func(context.Context, map[NodeID]any, error) (any, error) {
 		return "unused", nil
 	})))
 	assert.NoError(t, d.Freeze())
@@ -304,13 +350,13 @@ func TestDAG_ErrIsNilOnSuccess(t *testing.T) {
 }
 
 // The handler is only called on failure; the success path is unaffected.
-func TestDAG_FallbackNotCalledOnSuccess(t *testing.T) {
+func TestDAG_RecoverNotCalledOnSuccess(t *testing.T) {
 	var called atomic.Int32
 
 	d := NewDAG()
 	assert.NoError(t, d.AddNode("N", nil, func(context.Context, map[NodeID]any) (any, error) {
 		return "ok", nil
-	}, WithFallbackFunc(func(context.Context, map[NodeID]any, error) (any, error) {
+	}, WithRecoverFunc(func(context.Context, map[NodeID]any, error) (any, error) {
 		called.Add(1)
 		return "never", nil
 	})))
@@ -323,4 +369,42 @@ func TestDAG_FallbackNotCalledOnSuccess(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "ok", res["N"])
 	assert.Zero(t, called.Load())
+}
+
+// A panic stops short of the handler.
+//
+// future.CtxAsync does convert it into an error wrapping ErrPanic with the
+// stack attached, but that recover sits outside the node closure, so unwinding
+// skips the error branch and the handler never runs. The consequence is worth
+// being explicit about: "this node is optional" does not currently cover
+// panics, and neither Recovered nor Err reports the failure.
+//
+// Pinned as a contract boundary, not as an implementation detail callers can
+// ignore — if a panicking node should be tolerable, this test is the thing
+// that has to change along with the code.
+func TestDAG_RecoveryDoesNotSeePanics(t *testing.T) {
+	const boom = "assignment to entry in nil map"
+
+	var called atomic.Int32
+
+	d := NewDAG()
+	assert.NoError(t, d.AddNode("N", nil, func(context.Context, map[NodeID]any) (any, error) {
+		panic(boom)
+	}, WithRecoverFunc(func(_ context.Context, _ map[NodeID]any, _ error) (any, error) {
+		called.Add(1)
+		return "degraded", nil
+	})))
+	assert.NoError(t, d.Freeze())
+
+	inst, err := d.Instantiate(nil)
+	assert.NoError(t, err)
+
+	res, err := inst.Run(context.Background())
+
+	assert.ErrorIs(t, err, future.ErrPanic)
+	assert.Contains(t, err.Error(), boom)
+	assert.Nil(t, res)
+	assert.Zero(t, called.Load(), "the handler must not be reached")
+	assert.False(t, inst.nodes["N"].Recovered())
+	assert.NoError(t, inst.nodes["N"].Err(), "the error is never assigned to the node")
 }

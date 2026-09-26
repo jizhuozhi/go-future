@@ -44,10 +44,10 @@ type NodeSpec struct {
 	// value to publish when it is. Returning false leaves the value unused.
 	skipFunc func(ctx context.Context, deps map[NodeID]any) (bool, any)
 
-	// fallbackFunc decides, per failure, whether an execution error is
+	// recoverFunc decides, per failure, whether an execution error is
 	// recoverable. Returning a nil error recovers by publishing the returned
 	// value; returning an error propagates instead.
-	fallbackFunc func(ctx context.Context, deps map[NodeID]any, err error) (any, error)
+	recoverFunc func(ctx context.Context, deps map[NodeID]any, err error) (any, error)
 }
 
 // evalSkip evaluates the skip predicate. A node without a predicate is never
@@ -313,12 +313,13 @@ type NodeInstance struct {
 
 	subgraph *DAGInstance
 
-	pending  int32
-	future   *future.Future[any]
-	start    time.Time
-	duration time.Duration
-	skipped  bool
-	err      error
+	pending   int32
+	future    *future.Future[any]
+	start     time.Time
+	duration  time.Duration
+	skipped   bool
+	recovered bool
+	err       error
 
 	promise *future.Promise[any]
 }
@@ -331,14 +332,29 @@ func (n *NodeInstance) Future() *future.Future[any] { return n.future }
 func (n *NodeInstance) Duration() time.Duration     { return n.duration }
 func (n *NodeInstance) Skipped() bool               { return n.skipped }
 
+// Recovered reports whether the node failed and a WithRecoverFunc handler
+// replaced the error with a value.
+//
+// It is the third state alongside Skipped and Err, and it cannot be derived
+// from the other two. Err is populated both when a handler recovers and when
+// it declines, and a declining handler may rewrite the error before it fails
+// the run, so neither the node's error nor the run result identifies on its own
+// whether a given failure was absorbed.
+//
+// This is the flag to count degradations with. A recovered failure does not
+// appear in the error returned by DAGInstance.Run and does not appear in any
+// aggregate error rate, yet it means the caller was served with a worse answer
+// than a successful node would have produced.
+//
+// Returns false for nodes that succeeded, were skipped, or were never run.
+func (n *NodeInstance) Recovered() bool { return n.recovered }
+
 // Err returns the error the node function returned.
 //
 // It holds the error the node function returned, never one substituted by a
-// WithFallbackFunc handler, and it is populated even when that error was
-// recovered. That is the point: recovery makes the failure invisible in the run
-// result and in any aggregate error rate, so this is the only place left to
-// observe it. Read it (or wrap the node) to count recovered failures and alert
-// on them; a recovery means the request was served with a degraded answer.
+// WithRecoverFunc handler, and it is populated even when that error was
+// recovered. Pair it with Recovered to tell the two cases apart: Err alone
+// cannot, because a declining handler also leaves it populated.
 //
 // Returns nil for nodes that succeeded, were skipped, or never ran.
 func (n *NodeInstance) Err() error { return n.err }
@@ -439,11 +455,12 @@ func (d *DAGInstance) schedule(ctx context.Context, id NodeID) {
 				// propagates; with one, the handler decides whether this
 				// particular error is recoverable and may decline by returning
 				// an error of its own.
-				if node.spec.fallbackFunc != nil {
-					if recovered, recoverErr := node.spec.fallbackFunc(ctx, deps, err); recoverErr != nil {
+				if node.spec.recoverFunc != nil {
+					if recovered, recoverErr := node.spec.recoverFunc(ctx, deps, err); recoverErr != nil {
 						err = recoverErr
 					} else {
 						val, err = recovered, nil
+						node.recovered = true
 					}
 				}
 			}
@@ -489,7 +506,7 @@ func (d *DAGInstance) Nodes() map[NodeID]*NodeInstance {
 // Skipping and error recovery are independent. This option alone does not make
 // a node tolerant of failure: a skipped node publishes a value, but if the node
 // does run and fails, the error still fails the whole run. Combine it with
-// WithFallbackFunc to recover failures as well.
+// WithRecoverFunc to recover failures as well.
 //
 // That separation matters because the two mean different things. A skip is a
 // planned decision ("this model is irrelevant for this request", "the remaining
@@ -502,7 +519,7 @@ func (d *DAGInstance) Nodes() map[NodeID]*NodeInstance {
 // or an upstream value. It cannot observe a failed dependency. If any
 // dependency fails, the node is never scheduled and the predicate is never
 // called; to tolerate an upstream failure, give the upstream node a
-// WithFallbackFunc instead.
+// WithRecoverFunc instead.
 //
 // A skipped node never runs, so its Duration carries no statistical meaning for
 // latency aggregation. Filter on NodeInstance.Skipped before aggregating,
@@ -518,7 +535,7 @@ func WithSkipFunc(fn func(ctx context.Context, deps map[NodeID]any) (bool, any))
 	}
 }
 
-// WithFallbackFunc registers an error handler that decides, per failure,
+// WithRecoverFunc registers an error handler that decides, per failure,
 // whether a node's error is recoverable.
 //
 // When the node function returns an error, the handler is called with it:
@@ -528,9 +545,9 @@ func WithSkipFunc(fn func(ctx context.Context, deps map[NodeID]any) (bool, any))
 //	return nil, wrap    // do not recover, adding context first
 //
 // Recovering has to be an explicit decision per failure. Not every error
-// deserves a fallback: a timeout or a transient backend error is usually worth
+// deserves recovery: a timeout or a transient backend error is usually worth
 // degrading over, whereas a malformed request, an unknown feature field, or a
-// model/feature id space mismatch is a defect that a fallback would only paper
+// model/feature id space mismatch is a defect that recovering would only paper
 // over. Recovering unconditionally is the easy mistake here; write the
 // propagate branch first and recover only the cases you have actually reasoned
 // about.
@@ -538,18 +555,31 @@ func WithSkipFunc(fn func(ctx context.Context, deps map[NodeID]any) (bool, any))
 // This option is what makes a node optional. A node whose failure must fail the
 // whole run simply omits it.
 //
-// NodeInstance.Err always holds the error the node function returned, even when
-// the handler recovered it or substituted one of its own. Recovery hides a
-// failure in two places, the error returned by DAGInstance.Run and any
-// aggregate error rate, so use Err or a NodeFuncWrapper to count recovered
-// failures and alert on them: a recovery means the request was served with a
-// worse answer.
+// Recovery hides a failure in two places, the error returned by DAGInstance.Run
+// and any aggregate error rate, so it has to be counted explicitly:
+// NodeInstance.Recovered reports it, and NodeInstance.Err still holds the error
+// the node function returned. Count them and alert on them; a recovery means
+// the caller was served with a worse answer than a successful node would have
+// produced.
+//
+// A panic does not arrive here. The node closure runs inside future.CtxAsync,
+// which catches a panic with a deferred recover and turns it into an error
+// wrapping ErrPanic with the stack attached — but that recover sits outside
+// this closure, so unwinding skips the error branch below and the handler is
+// never called. A panicking node therefore fails the run even when it is
+// marked optional; NodeInstance.Recovered stays false, and NodeInstance.Err
+// stays nil because the assignment to it is skipped as well.
+//
+// Whether that boundary is intended or an accident of where the recover sits
+// deserves to be settled explicitly. If a panicking node ought to be
+// tolerable, the conversion has to move inside this closure so that ErrPanic
+// flows through the error branch like any other failure.
 //
 // The value published when recovering must match the type downstream nodes
 // assert on. An untyped nil will make `deps[id].(T)` panic downstream; return a
 // typed zero value instead (e.g. (*T)(nil), []T(nil)).
-func WithFallbackFunc(fn func(ctx context.Context, deps map[NodeID]any, err error) (any, error)) NodeOpt {
+func WithRecoverFunc(fn func(ctx context.Context, deps map[NodeID]any, err error) (any, error)) NodeOpt {
 	return func(n *NodeSpec) {
-		n.fallbackFunc = fn
+		n.recoverFunc = fn
 	}
 }

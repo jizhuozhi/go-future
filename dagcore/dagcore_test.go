@@ -28,7 +28,7 @@ func TestDAG_SimpleExecution(t *testing.T) {
 	})))
 	assert.NoError(t, dag.AddNode("D", nil, func(ctx context.Context, deps map[NodeID]any) (any, error) {
 		return nil, errFoo
-	}, WithFallbackFunc(func(context.Context, map[NodeID]any, error) (any, error) {
+	}, WithRecoverFunc(func(context.Context, map[NodeID]any, error) (any, error) {
 		return "fallback d", nil
 	})))
 
@@ -47,8 +47,9 @@ func TestDAG_SimpleExecution(t *testing.T) {
 	assert.True(t, inst.nodes[("C")].Skipped())
 	assert.NoError(t, inst.nodes[("C")].Err())
 
-	// D failed but was recovered; the error is still observable.
+	// D failed but was recovered; the error and the recovery are both observable.
 	assert.ErrorIs(t, inst.nodes[("D")].Err(), errFoo)
+	assert.True(t, inst.nodes[("D")].Recovered())
 
 	assert.Equal(t, dag, inst.Spec())
 }
@@ -312,7 +313,7 @@ func TestDAG_SubgraphExecution(t *testing.T) {
 	assert.NoError(t, mainDAG.AddSubgraph("subnode", []NodeID{"input"}, sub, inputMapping, outputMapping))
 	assert.NoError(t, mainDAG.AddSubgraph("skippable", []NodeID{"input"}, sub, inputMapping, outputMapping, WithSkipFunc(func(ctx context.Context, deps map[NodeID]any) (bool, any) {
 		return deps["input"].(int) > 0, -1
-	}), WithFallbackFunc(func(context.Context, map[NodeID]any, error) (any, error) {
+	}), WithRecoverFunc(func(context.Context, map[NodeID]any, error) (any, error) {
 		return -1, nil
 	})))
 	assert.NoError(t, mainDAG.Freeze())
