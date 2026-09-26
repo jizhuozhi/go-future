@@ -23,15 +23,13 @@ func TestDAG_SimpleExecution(t *testing.T) {
 	}))
 	assert.NoError(t, dag.AddNode("C", []NodeID{"B"}, func(ctx context.Context, deps map[NodeID]any) (any, error) {
 		return deps["B"].(string) + "c", nil
-	}, WithSkipFunc(func(ctx context.Context, deps map[NodeID]any) bool {
-		return deps["B"] != nil
-	}), WithDefaultFunc(func(ctx context.Context, deps map[NodeID]any) any {
-		return "default c"
+	}, WithSkipFunc(func(ctx context.Context, deps map[NodeID]any) (bool, any) {
+		return deps["B"] != nil, "skipped c"
 	})))
 	assert.NoError(t, dag.AddNode("D", nil, func(ctx context.Context, deps map[NodeID]any) (any, error) {
 		return nil, errFoo
-	}, WithDefaultFunc(func(ctx context.Context, deps map[NodeID]any) any {
-		return "default d"
+	}, WithFallbackFunc(func(context.Context, map[NodeID]any, error) (any, error) {
+		return "fallback d", nil
 	})))
 
 	assert.NoError(t, dag.Freeze())
@@ -42,10 +40,15 @@ func TestDAG_SimpleExecution(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "a", res["A"])
 	assert.Equal(t, "ab", res["B"])
-	assert.Equal(t, "default c", res["C"])
-	assert.Equal(t, "default d", res["D"])
+	assert.Equal(t, "skipped c", res["C"])
+	assert.Equal(t, "fallback d", res["D"])
 
-	assert.ErrorIs(t, inst.nodes[("D")].err, errFoo)
+	// C was skipped, so its function never ran and there is no error.
+	assert.True(t, inst.nodes[("C")].Skipped())
+	assert.NoError(t, inst.nodes[("C")].Err())
+
+	// D failed but was recovered; the error is still observable.
+	assert.ErrorIs(t, inst.nodes[("D")].Err(), errFoo)
 
 	assert.Equal(t, dag, inst.Spec())
 }
@@ -307,10 +310,10 @@ func TestDAG_SubgraphExecution(t *testing.T) {
 	}
 
 	assert.NoError(t, mainDAG.AddSubgraph("subnode", []NodeID{"input"}, sub, inputMapping, outputMapping))
-	assert.NoError(t, mainDAG.AddSubgraph("skippable", []NodeID{"input"}, sub, inputMapping, outputMapping, WithSkipFunc(func(ctx context.Context, deps map[NodeID]any) bool {
-		return deps["input"].(int) > 0
-	}), WithDefaultFunc(func(ctx context.Context, deps map[NodeID]any) any {
-		return -1
+	assert.NoError(t, mainDAG.AddSubgraph("skippable", []NodeID{"input"}, sub, inputMapping, outputMapping, WithSkipFunc(func(ctx context.Context, deps map[NodeID]any) (bool, any) {
+		return deps["input"].(int) > 0, -1
+	}), WithFallbackFunc(func(context.Context, map[NodeID]any, error) (any, error) {
+		return -1, nil
 	})))
 	assert.NoError(t, mainDAG.Freeze())
 
