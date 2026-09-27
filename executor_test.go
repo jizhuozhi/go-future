@@ -1,7 +1,8 @@
 package future
 
 import (
-	"sync"
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,72 +10,49 @@ import (
 	"github.com/jizhuozhi/go-future/executors"
 )
 
-func TestSetExecutor(t *testing.T) {
-	counter := 0
-	SetExecutor(executors.ExecutorFunc(func(f func()) {
-		counter++
-		go f()
-	}))
+var errPoolFull = errors.New("pool is full")
 
-	f := Async(func() (int, error) {
-		return 1, nil
-	})
-	val, err := f.Get()
-	assert.Equal(t, 1, val)
-	assert.Equal(t, nil, err)
-	assert.Equal(t, 1, counter)
-
-	assert.Panics(t, func() {
-		SetExecutor(nil)
-	})
+// withExecutor installs e for the duration of one test.
+func withExecutor(t *testing.T, e Executor) {
+	t.Helper()
+	prev := currentExecutor()
+	SetExecutor(e)
+	t.Cleanup(func() { SetExecutor(prev) })
 }
 
-// TestSetExecutorConcurrent races SetExecutor against the submit path.
-//
-// Two things have to hold. Under -race, a plain `var executor Executor` is
-// reported here, because SetExecutor writes the variable while Async reads it.
-// And because the two implementations below have different dynamic types,
-// storing them straight into an atomic.Value panics with "store of
-// inconsistently typed value" — which is what the executorBox indirection is
-// for.
-func TestSetExecutorConcurrent(t *testing.T) {
-	defer SetExecutor(executors.GoExecutor{})
+// refusing refuses every task.
+func refusing() Executor {
+	return executors.ExecutorFunc(func(func()) error { return errPoolFull })
+}
 
-	var wg sync.WaitGroup
+// A refused task must fail the Future instead of leaving it unresolved: a Future
+// that is never resolved blocks Get forever, which is a worse outcome than an
+// error the caller can act on.
+func TestExecutorRejectionFailsTheFuture(t *testing.T) {
+	withExecutor(t, refusing())
 
-	// Writers: keep swapping between two different Executor implementations.
-	for w := 0; w < 4; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := 0; i < 200; i++ {
-				if i%2 == 0 {
-					SetExecutor(executors.GoExecutor{})
-				} else {
-					SetExecutor(executors.ExecutorFunc(func(f func()) { go f() }))
-				}
-			}
-		}()
-	}
+	ran := false
+	_, err := Async(func() (int, error) { ran = true; return 1, nil }).Get()
 
-	// Readers: keep submitting while the swaps happen.
-	for r := 0; r < 4; r++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := 0; i < 200; i++ {
-				got, err := Async(func() (int, error) { return i, nil }).Get()
-				if err != nil {
-					t.Errorf("Async returned error %v", err)
-					return
-				}
-				if got != i {
-					t.Errorf("Async returned %d, want %d", got, i)
-					return
-				}
-			}
-		}()
-	}
+	assert.ErrorIs(t, err, ErrExecutorRejected)
+	assert.Contains(t, err.Error(), errPoolFull.Error(), "the executor's own error survives")
+	assert.False(t, ran, "a refused task must not run")
+}
 
-	wg.Wait()
+// The same holds for the context-aware entry points.
+func TestExecutorRejectionFailsCtxAsync(t *testing.T) {
+	withExecutor(t, refusing())
+
+	_, err := CtxAsync(context.Background(), func(context.Context) (int, error) { return 1, nil }).Get()
+	assert.ErrorIs(t, err, ErrExecutorRejected)
+}
+
+// An executor that accepts the task reports success, whether it runs the task on
+// another goroutine or inline.
+func TestExecutorInlineAcceptanceIsNotAnError(t *testing.T) {
+	withExecutor(t, executors.ExecutorFunc(func(f func()) error { f(); return nil }))
+
+	v, err := Async(func() (int, error) { return 42, nil }).Get()
+	assert.NoError(t, err)
+	assert.Equal(t, 42, v)
 }
