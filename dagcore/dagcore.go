@@ -532,6 +532,10 @@ func WithRecoverFunc(fn func(ctx context.Context, deps map[NodeID]any, err error
 
 // WithExecutor submits this node to e instead of the global executor. Absent,
 // the global executor set by future.SetExecutor applies.
+//
+// A refusal is fatal for the node: it fails with future.ErrExecutorRejected and
+// the node function never runs, so WithSkipFunc and WithRecoverFunc cannot
+// absorb it.
 func WithExecutor(e future.Executor) NodeOpt {
 	return func(n *NodeSpec) {
 		n.executor = e
