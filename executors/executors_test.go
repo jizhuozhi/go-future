@@ -1,6 +1,7 @@
 package executors
 
 import (
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -9,23 +10,34 @@ import (
 )
 
 func TestExecutorFunc(t *testing.T) {
-	executor := ExecutorFunc(func(f func()) {
+	executor := ExecutorFunc(func(f func()) error {
 		go f()
+		return nil
 	})
 	i := 0
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	executor.Submit(func() {
+	assert.NoError(t, executor.Submit(func() {
 		defer wg.Done()
 		i = 1
-	})
+	}))
 	wg.Wait()
 	assert.Equal(t, 1, i)
 }
 
+func TestExecutorFuncPropagatesRefusal(t *testing.T) {
+	refused := errors.New("too many tasks")
+	executor := ExecutorFunc(func(func()) error { return refused })
+
+	ran := false
+	err := executor.Submit(func() { ran = true })
+	assert.ErrorIs(t, err, refused)
+	assert.False(t, ran)
+}
+
 func TestGoExecutor(t *testing.T) {
 	done := make(chan int, 1)
-	GoExecutor{}.Submit(func() { done <- 1 })
+	assert.NoError(t, GoExecutor{}.Submit(func() { done <- 1 }))
 
 	select {
 	case v := <-done:

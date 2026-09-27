@@ -47,7 +47,7 @@ func CtxAsync[T any](ctx context.Context, f func(ctx context.Context) (T, error)
 
 func Submit[T any](e Executor, f func() (T, error)) *Future[T] {
 	s := &state[T]{}
-	e.Submit(func() {
+	if err := e.Submit(func() {
 		var val T
 		var err error
 		defer func() {
@@ -57,13 +57,17 @@ func Submit[T any](e Executor, f func() (T, error)) *Future[T] {
 			s.set(val, err)
 		}()
 		val, err = f()
-	})
+	}); err != nil {
+		// The task was refused, so nothing else will ever resolve this future.
+		var zero T
+		s.set(zero, rejected(err))
+	}
 	return &Future[T]{state: s}
 }
 
 func CtxSubmit[T any](ctx context.Context, e Executor, f func(ctx context.Context) (T, error)) *Future[T] {
 	s := &state[T]{}
-	e.Submit(func() {
+	if err := e.Submit(func() {
 		var val T
 		var err error
 		defer func() {
@@ -73,7 +77,11 @@ func CtxSubmit[T any](ctx context.Context, e Executor, f func(ctx context.Contex
 			s.set(val, err)
 		}()
 		val, err = f(ctx)
-	})
+	}); err != nil {
+		// The task was refused, so nothing else will ever resolve this future.
+		var zero T
+		s.set(zero, rejected(err))
+	}
 	return &Future[T]{state: s}
 }
 

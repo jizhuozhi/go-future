@@ -48,6 +48,9 @@ type NodeSpec struct {
 	// recoverable. Returning a nil error recovers by publishing the returned
 	// value; returning an error propagates instead.
 	recoverFunc func(ctx context.Context, deps map[NodeID]any, err error) (any, error)
+
+	// executor submits this node. nil means the global executor.
+	executor future.Executor
 }
 
 // evalSkip evaluates the skip predicate. A node without a predicate is never
@@ -402,6 +405,15 @@ func (d *DAGInstance) RunAsync(ctx context.Context) *future.Future[map[NodeID]an
 	return f
 }
 
+// submit routes a node closure to its own executor when the node declares one,
+// and to the global executor otherwise.
+func submit(ctx context.Context, e future.Executor, f func(context.Context) (any, error)) *future.Future[any] {
+	if e == nil {
+		return future.CtxAsync(ctx, f)
+	}
+	return future.CtxSubmit(ctx, e, f)
+}
+
 func (d *DAGInstance) schedule(ctx context.Context, id NodeID) {
 	node := d.nodes[id]
 
@@ -419,7 +431,7 @@ func (d *DAGInstance) schedule(ctx context.Context, id NodeID) {
 		run = d.wrappers[i](node, run)
 	}
 	node.start = time.Now()
-	future.CtxAsync(ctx, func(ctx context.Context) (any, error) {
+	submit(ctx, node.spec.executor, func(ctx context.Context) (any, error) {
 		var val any
 		var err error
 		deps := make(map[NodeID]any)
@@ -515,5 +527,17 @@ func WithSkipFunc(fn func(ctx context.Context, deps map[NodeID]any) (bool, any))
 func WithRecoverFunc(fn func(ctx context.Context, deps map[NodeID]any, err error) (any, error)) NodeOpt {
 	return func(n *NodeSpec) {
 		n.recoverFunc = fn
+	}
+}
+
+// WithExecutor submits this node to e instead of the global executor. Absent,
+// the global executor set by future.SetExecutor applies.
+//
+// A refusal is fatal for the node: it fails with future.ErrExecutorRejected and
+// the node function never runs, so WithSkipFunc and WithRecoverFunc cannot
+// absorb it.
+func WithExecutor(e future.Executor) NodeOpt {
+	return func(n *NodeSpec) {
+		n.executor = e
 	}
 }

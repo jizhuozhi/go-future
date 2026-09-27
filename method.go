@@ -57,7 +57,7 @@ func (f *Future[T]) ThenAsync[R any](cb func(val T, err error) *Future[R]) *Futu
 func (f *Future[T]) ThenGo[R any](cb func(val T, err error) (R, error)) *Future[R] {
 	s := &state[R]{}
 	f.state.subscribe(func(val T, err error) {
-		currentExecutor().Submit(func() {
+		if serr := currentExecutor().Submit(func() {
 			var rval R
 			var rerr error
 			defer func() {
@@ -67,7 +67,10 @@ func (f *Future[T]) ThenGo[R any](cb func(val T, err error) (R, error)) *Future[
 				s.set(rval, rerr)
 			}()
 			rval, rerr = cb(val, err)
-		})
+		}); serr != nil {
+			var zero R
+			s.set(zero, rejected(serr))
+		}
 	})
 	return &Future[R]{state: s}
 }

@@ -1,10 +1,22 @@
 package future
 
 import (
+	"errors"
+	"fmt"
 	"sync/atomic"
 
 	"github.com/jizhuozhi/go-future/executors"
 )
+
+// ErrExecutorRejected reports that an executor refused a task.
+//
+// The Future returned by Submit, Async, CtxSubmit or CtxAsync fails with this
+// error, and the task never runs.
+var ErrExecutorRejected = errors.New("future: executor rejected the task")
+
+// rejected wraps the error an executor returned so callers can test for
+// ErrExecutorRejected with errors.Is.
+func rejected(err error) error { return fmt.Errorf("%w: %v", ErrExecutorRejected, err) }
 
 // Executor defines an abstraction for executing asynchronous tasks in go-future.
 //
@@ -14,10 +26,17 @@ import (
 // You can override the default executor using any implementation of the Executor interface with SetExecutor.
 // A common pattern is to use executors.ExecutorFunc to wrap a goroutine pool, for example:
 //
-//	pool := ants.NewPool(100)
-//	SetExecutor(executors.ExecutorFunc(func(f func()) {
-//	    pool.Submit(f)
+//	pool, _ := ants.NewPool(100, ants.WithNonblocking(true))
+//	SetExecutor(executors.ExecutorFunc(func(f func()) error {
+//	    return pool.Submit(f)
 //	}))
+//
+// Submit returns nil when the task was accepted — on another goroutine or
+// inline in the caller, both are valid — and a non-nil error when it was
+// refused, in which case the task will not run. Reporting the refusal instead
+// of dropping the task silently is what keeps a bounded pool from turning a
+// rejection into a hang: the Future fails with ErrExecutorRejected rather than
+// waiting for a result that will never arrive.
 //
 // Most cases do NOT require changing the executor. Replacing the default executor can be useful
 // to limit concurrency, reuse goroutines, or reduce GC pressure.
@@ -28,7 +47,7 @@ import (
 //     understand the workload and have performed thorough performance testing.
 //   - Passing nil to SetExecutor will panic.
 type Executor interface {
-	Submit(func())
+	Submit(func()) error
 }
 
 // executorBox keeps the dynamic type held by the atomic.Value constant. Storing
